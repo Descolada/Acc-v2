@@ -34,6 +34,13 @@
         ObjectFromPoint(x:=unset, y:=unset, &idChild := "")
         ObjectFromWindow(hWnd:="A", idObject := 0)
         GetRootElement()
+        RegisterWinEvent(event, callback) 
+            Registers an event from Acc.EVENT to a callback function and returns a new object
+                containing the WinEventHook
+            The callback function needs to have three arguments: 
+                CallbackFunction(oAcc, Event, EventTime)
+            Unhooking of the event handler will happen once the returned object is destroyed
+            (either when overwritten by a constant, or when the script closes).
         SetWinEventHook(eventMin, eventMax, pCallback)
         UnhookWinEvent(hHook)
 
@@ -133,6 +140,7 @@ class Acc {
         throw UnsetItemError("Property item `"" value "`" not found!", -1)
     }
     static PropertyValueGetter := {get: (obj, value) => Acc.PropertyFromValue(obj, value)}
+    static RegisteredWinEvents := Map()
 
     ;https://msdn.microsoft.com/en-us/library/windows/desktop/dd373606(v=vs.85).aspx
     static OBJID := {WINDOW:0x00000000
@@ -738,6 +746,18 @@ class Acc {
         Return oAcc
     }
 
+    static ObjectFromEvent(hWnd, idObject, idChild) {
+        if (DllCall("oleacc\AccessibleObjectFromEvent"
+                , "Ptr", hWnd
+                , "UInt", idObject
+                , "UInt", idChild
+                , "Ptr*", pacc := ComValue(9,0)
+                , "Ptr", varChild := Buffer(16)) = 0) {
+            return Acc.IAccessible(pacc, NumGet(varChild, 8, "UInt"), hWnd)
+        }
+        throw Error("ObjectFromEvent failed", -1)
+    }
+
     static GetRootElement() {
         return Acc.ObjectFromWindow(0x10010)
     }
@@ -771,12 +791,23 @@ class Acc {
         return sState
     }
 
+    static RegisterWinEvent(event, callback) {
+        pCallback := CallbackCreate(this.GetMethod("HandleWinEvent").Bind(this, callback), "F", 7)
+        hook := Acc.SetWinEventHook(event,event,pCallback)
+        return {__Hook:hook, __Callback:pCallback, __Delete:{ call: (*) => (this.UnhookWinEvent(hook), CallbackFree(pCallback)) }}
+    }
+
+    static HandleWinEvent(fCallback, hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
+        return fCallback(Acc.ObjectFromEvent(hWnd, idObject, idChild), Event, dwmsEventTime&0x7FFFFFFF)
+    }
+
     static SetWinEventHook(eventMin, eventMax, pCallback) {
-        Return  DllCall("SetWinEventHook", "Uint", eventMin, "Uint", eventMax, "Uint", 0, "Ptr", pCallback, "Uint", 0, "Uint", 0, "Uint", 0)
+        DllCall("ole32\CoInitialize", "Uint", 0)
+        Return DllCall("SetWinEventHook", "Uint", eventMin, "Uint", eventMax, "Uint", 0, "UInt", pCallback, "Uint", 0, "Uint", 0, "Uint", 0)
     }
 
     static UnhookWinEvent(hHook) {
-        Return  DllCall("UnhookWinEvent", "Ptr", hHook)
+        Return DllCall("UnhookWinEvent", "Ptr", hHook)
     }
 
     class Viewer {

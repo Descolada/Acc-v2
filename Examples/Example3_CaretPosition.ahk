@@ -1,4 +1,4 @@
-#include ..\Lib\Acc.ahk
+﻿#include ..\Lib\Acc.ahk
 oCaretPos := {x:0,y:0}
 Loop {
     try oCaretPos := Acc.ObjectFromWindow(, Acc.OBJID.CARET).Location
