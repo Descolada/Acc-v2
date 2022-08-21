@@ -33,8 +33,11 @@
     Acc methods:
         ObjectFromPoint(x:=unset, y:=unset, &idChild := "", activateChromium := True)
         ObjectFromWindow(hWnd:="A", idObject := 0, activateChromium := True)
-        ActivateChromiumAccessibility(hWnd) => Sends the WM_GETOBJECT message to the Chromium 
-            document element and waits for the app to be accessible to Acc
+        ActivateChromiumAccessibility(hWnd) 
+            Sends the WM_GETOBJECT message to the Chromium document element and waits for the 
+            app to be accessible to Acc. This is called when ObjectFromPoint or ObjectFromWindow 
+            activateChromium flag is set to True. A small performance increase may be gotten 
+            if that flag is set to False when it is not needed.
         GetRootElement()
         RegisterWinEvent(event, callback) 
             Registers an event from Acc.EVENT to a callback function and returns a new object
@@ -63,14 +66,16 @@
         StateText           => State converted into text form
         Description
         DefaultAction
-        Focus
+        Focus               => Returns the focused child element (or itself)
+                               If no child is focused, an error is thrown
         Selection
         Parent              => Returns the parent element
         IsChild             => Checks whether the current element is of child type
         Length              => Returns the number of children the element has
         Location            => Returns an object containing {x,y,w,h}
         Children            => Returns all children as an array (usually not required)
-        wId                 => ID of the window the element is inside
+        Exists              => Checks whether the element is still alive and accessible
+        WinID               => ID of the window the element belongs to
         oAcc                => ComObject of the underlying IAccessible
         childId             => childId of the underlying IAccessible
     
@@ -420,15 +425,31 @@ class Acc {
         StateText => (Acc.GetStateText(this.oAcc.accState[this.childId]))
         Description => (this.oAcc.accDescription[this.childId])
         DefaultAction => (this.oAcc.accDefaultAction[this.childId])
-        Focus => (this.oAcc.accFocus())
+        Focus {
+            get {
+                varChild := this.oAcc.accFocus()
+                if Type(varChild) = "ComObject"
+                    return Acc.IAccessible(Acc.Query(varChild),,this.wId)
+                else if IsInteger(varChild)
+                    return Acc.IAccessible(this.oAcc,varChild,this.wId)
+                else
+                    return
+            }
+        } 
         Selection => (this.childId == 0 ? this.oAcc.accState : 0)
-        Parent => (Acc.IAccessible(Acc.Query(this.oAcc.accParent),,this.wId))
+        Parent => (oParent := Acc.IAccessible(Acc.Query(this.oAcc.accParent),,oParent.WinID))
+        WinID {
+            get {
+                if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", ComObjValue(this.oAcc), "uint*", &hWnd:=0) = 0
+                    return DllCall("GetAncestor", "UInt", hWnd, "UInt", GA_ROOT := 2)
+                throw Error("WindowFromAccessibleObject failed", -1)
+            }
+        }
 
         IsChild => (this.childId == 0 ? False : True)
         Length => (this.childId == 0 ? this.oAcc.accChildCount : 0)
         Exists {
             get {
-                
                 if ((state := this.State) == 32768) || (state == 1) || (((pos := this.Location).x==0) && (pos.y==0) && (pos.w==0) && (pos.h==0))
                     return 0
                 return 1
@@ -761,7 +782,7 @@ class Acc {
                 , "UInt", idChild
                 , "Ptr*", pacc := ComValue(9,0)
                 , "Ptr", varChild := Buffer(16)) = 0) {
-            return Acc.IAccessible(pacc, NumGet(varChild, 8, "UInt"), hWnd)
+            return Acc.IAccessible(pacc, NumGet(varChild, 8, "UInt"),  DllCall("GetAncestor", "UInt", hWnd, "UInt", 2))
         }
         throw Error("ObjectFromEvent failed", -1)
     }
