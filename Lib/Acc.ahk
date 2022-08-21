@@ -56,23 +56,23 @@
         Query(pAcc)                             => for internal use
 
     IAccessible element properties:
-        Name                => Gets or sets the name
-        Value               => Gets or sets the value
-        Role                => Role as an integer
-        RoleText            => Role converted into text form
-        Help
-        KeyboardShortcut
-        State               => State as an integer
+        Name                => Gets or sets the name. All objects support getting this property.
+        Value               => Gets or sets the value. Not all objects have a value.
+        Role                => Gets the Role of the specified object in integer form. All objects support this property.
+        RoleText            => Role converted into text form. All objects support this property.
+        Help                => Retrieves the Help property string of an object. Not all objects support this property.
+        KeyboardShortcut    => Retrieves the specified object's shortcut key or access key. Not all objects support this property.
+        State               => Retrieves the current state in integer form. All objects support this property.
         StateText           => State converted into text form
-        Description
-        DefaultAction
-        Focus               => Returns the focused child element (or itself)
+        Description         => Retrieves a string that describes the visual appearance of the specified object. Not all objects have a description.
+        DefaultAction       => Retrieves a string that indicates the object's default action. Not all objects have a default action.
+        Focus               => Returns the focused child element (or itself).
                                If no child is focused, an error is thrown
-        Selection
-        Parent              => Returns the parent element
+        Selection           => Retrieves the selected children of this object. All objects that support selection must support this property.
+        Parent              => Returns the parent element. All objects support this property.
         IsChild             => Checks whether the current element is of child type
         Length              => Returns the number of children the element has
-        Location            => Returns an object containing {x,y,w,h}
+        Location            => Returns the object's current screen location in an object {x,y,w,h}
         Children            => Returns all children as an array (usually not required)
         Exists              => Checks whether the element is still alive and accessible
         WinID               => ID of the window the element belongs to
@@ -80,9 +80,10 @@
         childId             => childId of the underlying IAccessible
     
     IAccessible element methods:
-        Select(flags)       => flags can be any of the SELECTIONFLAG constants
-        DoDefaultAction()
-        HitTest(x, y)       => unused
+        Select(flags)       => modifies the selection or moves the keyboard focus of the specified object. flags can be any of the SELECTIONFLAG constants
+        DoDefaultAction()   => performs the specified object's default action. Not all objects have a default action.
+        HitTest(x, y)       => retrieves the child element or child object that is displayed at a specific point on the screen.
+                               This shouldn't be used, since Acc.ObjectFromPoint uses this internally
         GetNthChild(n)      => Equal to element[n]
         GetLocation(relativeTo:="")
             Returns an object containing the x, y coordinates and width and height: {x:x coordinate, y:y coordinate, w:width, h:height}. relativeTo can be client, window or screen, default is A_CoordModeMouse.
@@ -130,7 +131,8 @@
         ControlClick(WhichButton:="left", ClickCount:=1, Options:="")
             ControlClicks the element after getting relative coordinates with GetLocation("client"). 
             If WhichButton is a number, then a Sleep will be called afterwards. Ex: ControlClick(200) will sleep 200ms after clicking. Same for ControlClick("ahk_id 12345", 200)
-
+        Navigate(navDir)
+            Navigates in one of the directions specified by Acc.NAVDIR constants. Not all elements implement this method. 
 
 */
 
@@ -353,6 +355,8 @@ class Acc {
                 throw Error("Could not access an IAccessible Object")
             this.DefineProp("oAcc", {value:oAcc})
             this.DefineProp("childId", {value:childId})
+            if wId=0
+                try wId := this.WinID
             this.DefineProp("wId", {value:wId})
         }
         __Get(Name, Params) {
@@ -408,6 +412,15 @@ class Acc {
         Select(flags) => (this.oAcc.accSelect(flags,this.childId)) ; flags can be any of the SELECTIONFLAG
         DoDefaultAction() => (this.oAcc.accDoDefaultAction(this.childId))
         HitTest(x, y) => (this.oAcc.accHitTest(x, y))
+        Navigate(navDir) {
+            varEndUpAt := this.oAcc.accNavigate(navDir,this.childId)
+            if Type(varEndUpAt) = "ComObject"
+                return Acc.IAccessible(Acc.Query(varEndUpAt))
+            else if IsInteger(varEndUpAt)
+                return Acc.IAccessible(this.oAcc, varEndUpAt, this.wId)
+            else
+                return
+        }
 
         Name {
             get => (this.oAcc.accName[this.childId])
@@ -437,7 +450,7 @@ class Acc {
             }
         } 
         Selection => (this.childId == 0 ? this.oAcc.accState : 0)
-        Parent => (oParent := Acc.IAccessible(Acc.Query(this.oAcc.accParent),,oParent.WinID))
+        Parent => (Acc.IAccessible(Acc.Query(this.oAcc.accParent)))
         WinID {
             get {
                 if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", ComObjValue(this.oAcc), "uint*", &hWnd:=0) = 0
