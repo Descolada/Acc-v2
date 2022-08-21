@@ -50,10 +50,10 @@
         UnhookWinEvent(hHook)
 
         Legacy methods:
-        ObjectFromPath(ChildPath, hWnd:="A")    => same as ObjectFromWindow[comma-separated path]
-        GetRoleText(nRole)                      => same as element.RoleText
-        GetStateText(nState)                    => same as element.StateText
-        Query(pAcc)                             => for internal use
+        ObjectFromPath(ChildPath, hWnd:="A")    => Same as ObjectFromWindow[comma-separated path]
+        GetRoleText(nRole)                      => Same as element.RoleText
+        GetStateText(nState)                    => Same as element.StateText
+        Query(pAcc)                             => For internal use
 
     IAccessible element properties:
         Name                => Gets or sets the name. All objects support getting this property.
