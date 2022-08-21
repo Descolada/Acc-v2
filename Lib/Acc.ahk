@@ -31,8 +31,10 @@
         EVENT
     
     Acc methods:
-        ObjectFromPoint(x:=unset, y:=unset, &idChild := "")
-        ObjectFromWindow(hWnd:="A", idObject := 0)
+        ObjectFromPoint(x:=unset, y:=unset, &idChild := "", activateChromium := True)
+        ObjectFromWindow(hWnd:="A", idObject := 0, activateChromium := True)
+        ActivateChromiumAccessibility(hWnd) => Sends the WM_GETOBJECT message to the Chromium 
+            document element and waits for the app to be accessible to Acc
         GetRootElement()
         RegisterWinEvent(event, callback) 
             Registers an event from Acc.EVENT to a callback function and returns a new object
@@ -709,24 +711,28 @@ class Acc {
         }
     }
 
-    static ObjectFromPoint(x:=unset, y:=unset, &idChild := "") {
+    static ObjectFromPoint(x:=unset, y:=unset, &idChild := "", activateChromium:=True) {
         if !(IsSet(x) && IsSet(y))
             DllCall("GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
         else {
             pt64 := y << 32 | x
         }
+        wId := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", GA_ROOT := 2) ; hwnd from point by SKAN
+        if activateChromium
+            Acc.ActivateChromiumAccessibility(wId)
         pvarChild := Buffer(8 + 2 * A_PtrSize)
         if DllCall("oleacc\AccessibleObjectFromPoint", "int64",pt64, "ptr*",&ppAcc := 0, "ptr",pvarChild) = 0
         {	; returns a pointer from which we get a Com Object
             idChild:=NumGet(pvarChild,8,"UInt")
-            wId := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", GA_ROOT := 2) ; hwnd from point by SKAN
             return Acc.IAccessible(ComValue(9, ppAcc), idChild, wId)
         }
     }
     
-    static ObjectFromWindow(hWnd:="A", idObject := 0) {
+    static ObjectFromWindow(hWnd:="A", idObject := 0, activateChromium:=True) {
         if !hWnd
             throw Error("Invalid window handle provided", -2)
+        if activateChromium
+            Acc.ActivateChromiumAccessibility(hWnd)
         if !IsInteger(hWnd)
             hWnd := WinExist(hWnd)
         IID := Buffer(16)
@@ -736,7 +742,9 @@ class Acc {
             Return Acc.IAccessible(ComObj,,hWnd)
     }
     
-    static ObjectFromPath(ChildPath, hWnd:="A") {
+    static ObjectFromPath(ChildPath, hWnd:="A", activateChromium:=True) {
+        if activateChromium
+            Acc.ActivateChromiumAccessibility(hWnd)
         oAcc := Acc.ObjectFromWindow(hWnd)
         ChildPath := StrReplace(StrReplace(ChildPath, ".", ","), " ")
         Loop Parse ChildPath, ","
@@ -760,6 +768,33 @@ class Acc {
 
     static GetRootElement() {
         return Acc.ObjectFromWindow(0x10010)
+    }
+
+    static ActivateChromiumAccessibility(hwnd) {
+        static activatedHwnds := Map()
+		if !IsInteger(hwnd)
+			hwnd := WinExist(hwnd)
+        if activatedHwnds.Has(hwnd)
+            return
+        activatedHwnds[hwnd] := 1
+        cList := WinGetControls(hwnd)
+        for ctrl in cList {
+            if (ctrl = "Chrome_RenderWidgetHostHWND1") {
+                SendMessage(WM_GETOBJECT := 0x003D, 0, 1, "Chrome_RenderWidgetHostHWND1", hwnd)
+                try {
+                    rendererEl := Acc.ObjectFromWindow(hwnd).FindFirst({Role:15})
+                    rendererEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
+                }
+                startTime := A_TickCount
+                while IsSet(rendererEl) && (A_TickCount-startTime < 500) {
+                    try 
+                        if rendererEl.Value
+                            return
+                    Sleep 40
+                }
+                break
+            }
+        }
     }
        
     static Query(pAcc) {
@@ -857,7 +892,7 @@ class Acc {
             }
             this.Capturing := True
             HotKey("~F1", this.CaptureHotkeyFunc, "Off")
-            HotKey("~Esc", this.CaptureHotkeyFunc)
+            HotKey("~Esc", this.CaptureHotkeyFunc, "On")
             this.TVAcc.Delete()
             this.TVAcc.Add("Hold cursor still to construct tree")
             this.ButCapture.Text := "Stop capturing (Esc)"
@@ -879,7 +914,7 @@ class Acc {
                 this.Capturing := False
                 this.ButCapture.Text := "Start capturing (F1)"
                 HotKey("~Esc", this.CaptureHotkeyFunc, "Off")
-                HotKey("~F1", this.CaptureHotkeyFunc)
+                HotKey("~F1", this.CaptureHotkeyFunc, "On")
                 SetTimer(this.CaptureCallback, 0)
                 this.Stored.oAcc.Highlight()
                 return
