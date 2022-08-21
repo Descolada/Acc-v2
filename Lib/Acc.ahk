@@ -783,7 +783,7 @@ class Acc {
           , "Uint"	, nState
           , "Ptr" 	, 0
           , "Uint"	, 0)
-        VarSetStrCapacity(&sState, 2*nSize+2)
+        VarSetStrCapacity(&sState, nSize+2)
         DllCall("oleacc\GetStateText"
           , "Uint"	, nState
           , "str" 	, sState
