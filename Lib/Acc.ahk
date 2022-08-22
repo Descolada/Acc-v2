@@ -481,17 +481,15 @@ class Acc {
 
         Children {
             get {
-                if this.IsChild
+                if this.IsChild || !(cChildren := this.oAcc.accChildCount)
                     return []
-                oAcc := this.oAcc
-                cChildren := oAcc.accChildCount, Children := Array()
-                varChildren := Buffer(cChildren * (8+2*A_PtrSize))
+                Children := Array(), varChildren := Buffer(cChildren * (8+2*A_PtrSize))
                 try {
-                    if DllCall("oleacc\AccessibleChildren", "ptr", ComObjValue(oAcc), "int",0, "int", cChildren, "ptr", varChildren, "int*", cChildren) > -1 {
+                    if DllCall("oleacc\AccessibleChildren", "ptr", ComObjValue(this.oAcc), "int",0, "int", cChildren, "ptr", varChildren, "int*", cChildren) > -1 {
                         Loop cChildren {
                             i := (A_Index-1) * (A_PtrSize * 2 + 8) + 8
                             child := NumGet(varChildren, i, "ptr")
-                            Children.Push(NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(oAcc, child, this.wId))
+                            Children.Push(NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.oAcc, child, this.wId))
                             NumGet(varChildren, i-8, "ptr") = 9 ? ObjRelease(child) : ""
                         }
                         Return Children
