@@ -1,7 +1,6 @@
 ﻿#include ..\Lib\Acc.ahk
 
 Run("notepad.exe")
-WinActivate("ahk_exe notepad.exe")
 WinWaitActive("ahk_exe notepad.exe")
 oAcc := Acc.ObjectFromWindow("ahk_exe notepad.exe")
 oEditor := oAcc[4,1,4] ; Can get the element by path
