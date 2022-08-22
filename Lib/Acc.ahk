@@ -382,18 +382,18 @@ class Acc {
         }
 
         __Enum(varCount) {
-            maxLen := this.Length, i := 0
+            maxLen := this.Length, i := 0, children := this.Children
             EnumElements(&element) {
                 if ++i > maxLen
                     return false
-                element := this.GetNthChild(i)
+                element := children[i]
                 return true
             }
             EnumIndexAndElements(&index, &element) {
                 if ++i > maxLen
                     return false
                 index := i
-                element := this.GetNthChild(i)
+                element := children[i]
                 return true
             }
             return (varCount = 1) ? EnumElements : EnumIndexAndElements
@@ -481,6 +481,8 @@ class Acc {
 
         Children {
             get {
+                if this.IsChild
+                    return []
                 oAcc := this.oAcc
                 cChildren := oAcc.accChildCount, Children := Array()
                 varChildren := Buffer(cChildren * (8+2*A_PtrSize))
@@ -552,7 +554,7 @@ class Acc {
             if scope>1
                 return RecursiveFind(this, condition, scope)
             RecursiveFind(element, condition, scope:=4, path:="") {
-                for i, child in element {
+                for i, child in element.Children {
                     if child.ValidateCondition(condition)
                         return child.DefineProp("Path", {value:path (path?",":"") i})
                     else if scope&4
