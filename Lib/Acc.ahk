@@ -91,8 +91,10 @@
         FindFirst(condition, scope:=4) 
             Finds the first element matching the condition (see description under ValidateCondition)
             Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children)
+            The returned element also has the "Path" property with the found elements path
         FindAll(condition, scope:=4)
             Returns an array of elements matching the condition (see description under ValidateCondition)
+            The returned elements also have the "Path" property with the found elements path
         WaitElementExist(conditionOrPath, scope:=4, timeOut:=-1)
             Waits an element exist that matches a condition or a path. 
             Timeout less than 1 waits indefinitely, otherwise is the wait time in milliseconds
@@ -542,38 +544,40 @@ class Acc {
 
         ; Finds the first element matching the condition (see description under ValidateCondition)
         ; Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children)
+        ; The returned element also has the "Path" property with the found elements path
         FindFirst(condition, scope:=4) {
-            if scope&1 {
+            if scope&1
                 if this.ValidateCondition(condition)
-                    return this
-            }
-            if scope>1 {
-                for _, el in this {
-                    if el.ValidateCondition(condition)
-                        return el
-                    else if scope&4 {
-                        try return el.FindFirst(condition, scope ^= 1)
-                    } 
+                    return this.DefineProp("Path", {value:""})
+            if scope>1
+                return RecursiveFind(this, condition, scope)
+            RecursiveFind(element, condition, scope:=4, path:="") {
+                for i, child in element {
+                    if child.ValidateCondition(condition)
+                        return child.DefineProp("Path", {value:path (path?",":"") i})
+                    else if scope&4
+                        try return RecursiveFind(child, condition, scope ^= 1, path (path?",":"") i)
                 }
-            }
-            throw Error("Matching Acc object not found")
+                throw Error("Matching Acc object not found")
+            }  
         }
         ; Returns an array of elements matching the condition (see description under ValidateCondition)
+        ; The returned elements also have the "Path" property with the found elements path
         FindAll(condition, scope:=4) {
-            RecursiveFind(this, condition, scope, &matches := [])
+            matches := []
+            if scope&1
+                if this.ValidateCondition(condition)
+                    matches.Push(this.DefineProp("Path", ""))
+            if scope>1
+                RecursiveFind(this, condition, (scope|1)^1, &matches)
             return matches
-
-            RecursiveFind(element, condition, scope, &matches) {
-                if scope&1 {
-                    if element.ValidateCondition(condition)
-                        matches.Push(element)
-                }
+            RecursiveFind(element, condition, scope, &matches, path:="") {
                 if scope>1 {
-                    for _, el in element {
-                        if el.ValidateCondition(condition)
-                            matches.Push(el)
+                    for i, child in element {
+                        if child.ValidateCondition(condition)
+                            matches.Push(child.DefineProp("Path", {value:path (path?",":"") i}))
                         if scope&4
-                            RecursiveFind(el, condition, scope ^= 1, &matches)
+                            RecursiveFind(child, condition, scope, &matches, path (path?",":"") i)
                     }
                 }
             }          
@@ -641,6 +645,9 @@ class Acc {
                                 if !((casesensitive && (propValue == cond)) || (!casesensitive && (propValue = cond)))
                                     return 0
                         }
+                    case "Acc.IAccessible":
+                        if (prop="IsEqual") ? !this.IsEqual(cond) : !this.ValidateCondition(cond)
+                            return 0
                     default:
                         if (prop = "not") ? this.ValidateCondition(cond) : !this.ValidateCondition(cond)
                             return 0
