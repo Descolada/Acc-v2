@@ -997,45 +997,27 @@ class Acc {
             if this.Capturing
                 return
             oAcc := this.Stored.TreeView[Info]
+            try this.SBMain.SetText("  Path: " oAcc.Path)
             this.LVProps_Populate(oAcc)
+
         }
         ConstructTreeView() {
             this.TVAcc.Delete()
             this.TVAcc.Opt("-Redraw")
-            this.SBMain.SetText("  Path: " this.GetAccPathTopDown(this.Stored.mwId, this.Stored.oAcc))
             this.RecurseTreeView(Acc.ObjectFromWindow(this.Stored.mwId))
             this.TVAcc.Opt("+Redraw")
             for k, v in this.Stored.TreeView
                 if this.Stored.oAcc.IsEqual(v)
-                    this.TVAcc.Modify(k, "Vis Select")
-            
-
+                    this.TVAcc.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " v.Path)
         }
-        RecurseTreeView(oAcc, parent:="") {
+        RecurseTreeView(oAcc, parent:="", path:="") {
             try elDesc := " `"" oAcc.Name "`""
             catch
                 elDesc := " `"`""
             elDesc := oAcc.RoleText elDesc
-            this.Stored.TreeView[TWEl := this.TVAcc.Add(elDesc, parent, "Expand")] := oAcc
+            this.Stored.TreeView[TWEl := this.TVAcc.Add(elDesc, parent, "Expand")] := oAcc.DefineProp("Path", {value:path})
             for k, v in oAcc
-                this.RecurseTreeView(v, TWEl)
-        }
-        BuildAccTreeRecursive(oAcc, tree, path:="") {
-            if !IsObject(oAcc) || !oAcc.length
-                return tree
-            For i, oChild in oAcc {
-                tree[path (path?",":"") i] := oChild
-                tree := this.BuildAccTreeRecursive(oChild, tree, path (path?",":"") i)
-            }
-            return tree
-        }
-        GetAccPathTopDown(hwnd, oAcc, updateTree:=False) {
-            if !this.Stored.Trees.Has(hwnd) || updateTree
-                this.Stored.Trees[hwnd] := this.BuildAccTreeRecursive(Acc.ObjectFromWindow(hwnd), Map("Root", oAcc))
-            for k, v in this.Stored.Trees[hwnd] {
-                if v.IsEqual(oAcc)
-                    return k
-            }
+                this.RecurseTreeView(v, TWEl, path (path?",":"") k)
         }
     }
 }
