@@ -139,6 +139,7 @@
 */
 
 #DllLoad oleacc
+;DllCall("SetThreadDpiAwarenessContext", "ptr", -4, "ptr")
 
 if (!A_IsCompiled and A_LineFile=A_ScriptFullPath)
     Acc.Viewer()
@@ -649,7 +650,12 @@ class Acc {
                         if (prop="IsEqual") ? !this.IsEqual(cond) : !this.ValidateCondition(cond)
                             return 0
                     default:
-                        if (prop = "not") ? this.ValidateCondition(cond) : !this.ValidateCondition(cond)
+                        if (prop = "Location") {
+                            for lprop, lval in cond {
+                                if this.%lprop% != lval
+                                    return 0
+                            }
+                        } else if ((prop = "not") && this.ValidateCondition(cond)) || !this.ValidateCondition(cond)
                             return 0
                 }
             }
@@ -753,9 +759,9 @@ class Acc {
     }
 
     static ObjectFromPoint(x:=unset, y:=unset, &idChild := "", activateChromium:=True) {
-        if !(IsSet(x) && IsSet(y))
+        if !(IsSet(x) && IsSet(y)) {
             DllCall("GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
-        else {
+        } else {
             pt64 := y << 32 | x
         }
         wId := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", GA_ROOT := 2) ; hwnd from point by SKAN
@@ -921,10 +927,10 @@ class Acc {
         }
         gViewer_Size(GuiObj, MinMax, Width, Height) {
             this.TVAcc.GetPos(&TVAccX, &TVAccY, &TVAccWidth, &TVAccHeight)
-            this.TVAcc.Move(,,Width-TVAccX-10,Height-TVAccY-25)
+            this.TVAcc.Move(,,Width-TVAccX-10,Height-TVAccY-30)
             this.TVAcc.GetPos(&LVPropsX, &LVPropsY, &LVPropsWidth, &LVPropsHeight)
             this.LVProps.Move(,,,Height-LVPropsY-225)
-            this.ButCapture.Move(,Height -50)
+            this.ButCapture.Move(,Height -55)
         }
         ButCapture_Click(GuiCtrlObj?, Info?) {
             if this.Capturing {
