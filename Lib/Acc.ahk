@@ -75,7 +75,8 @@
         Location            => Returns the object's current screen location in an object {x,y,w,h}
         Children            => Returns all children as an array (usually not required)
         Exists              => Checks whether the element is still alive and accessible
-        WinID               => ID of the window the element belongs to
+        ControlID           => ID (hwnd) of the control associated with the element
+        WinID               => ID (hwnd) of the window the element belongs to
         oAcc                => ComObject of the underlying IAccessible
         childId             => childId of the underlying IAccessible
     
@@ -441,9 +442,16 @@ class Acc {
         StateText => (Acc.GetStateText(this.oAcc.accState[this.childId]))
         Description => (this.oAcc.accDescription[this.childId])
         DefaultAction => (this.oAcc.accDefaultAction[this.childId])
-        Focus => (this.ObjectFromVariant(this.oAcc.accFocus())) 
-        Selection => (this.ObjectFromVariant(this.oAcc.accSelection())) 
+        Focus => (this.IAccessibleFromVariant(this.oAcc.accFocus())) 
+        Selection => (this.IAccessibleFromVariant(this.oAcc.accSelection())) 
         Parent => (Acc.IAccessible(Acc.Query(this.oAcc.accParent)))
+        ControlID {
+            get {
+                if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", ComObjValue(this.oAcc), "uint*", &hWnd:=0) = 0
+                    return hWnd
+                throw Error("WindowFromAccessibleObject failed", -1)
+            }
+        }
         WinID {
             get {
                 if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", ComObjValue(this.oAcc), "uint*", &hWnd:=0) = 0
@@ -490,14 +498,14 @@ class Acc {
             }
         }
 
-        ObjectFromVariant(var) {
+        IAccessibleFromVariant(var) {
             if Type(var) = "ComObject"
                 return Acc.IAccessible(Acc.Query(var),,this.wId)
             else if Type(var) = "Enumerator" {
                 oArr := []
                 Loop {
                     if var.Call(&childId)
-                        oArr.Push(this.ObjectFromVariant(childId))
+                        oArr.Push(this.IAccessibleFromVariant(childId))
                     else 
                         return oArr
                 }
