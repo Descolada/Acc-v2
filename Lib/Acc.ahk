@@ -441,18 +441,8 @@ class Acc {
         StateText => (Acc.GetStateText(this.oAcc.accState[this.childId]))
         Description => (this.oAcc.accDescription[this.childId])
         DefaultAction => (this.oAcc.accDefaultAction[this.childId])
-        Focus {
-            get {
-                varChild := this.oAcc.accFocus()
-                if Type(varChild) = "ComObject"
-                    return Acc.IAccessible(Acc.Query(varChild),,this.wId)
-                else if IsInteger(varChild)
-                    return Acc.IAccessible(this.oAcc,varChild,this.wId)
-                else
-                    return
-            }
-        } 
-        Selection => (this.childId == 0 ? this.oAcc.accState : 0)
+        Focus => (this.ObjectFromVariant(this.oAcc.accFocus())) 
+        Selection => (this.ObjectFromVariant(this.oAcc.accSelection())) 
         Parent => (Acc.IAccessible(Acc.Query(this.oAcc.accParent)))
         WinID {
             get {
@@ -498,6 +488,23 @@ class Acc {
                 }
                 throw Error("AccessibleChildren DllCall Failed", -1)
             }
+        }
+
+        ObjectFromVariant(var) {
+            if Type(var) = "ComObject"
+                return Acc.IAccessible(Acc.Query(var),,this.wId)
+            else if Type(var) = "Enumerator" {
+                oArr := []
+                Loop {
+                    if var.Call(&childId)
+                        oArr.Push(this.ObjectFromVariant(childId))
+                    else 
+                        return oArr
+                }
+            } else if IsInteger(var)
+                return Acc.IAccessible(this.oAcc,var,this.wId)
+            else
+                return var
         }
     
         GetNthChild(n) {
@@ -902,8 +909,8 @@ class Acc {
             this.gViewer.Add("Text", "w100", "Window Info").SetFont("bold")
             this.LVWin := this.gViewer.Add("ListView", "h140 w250", ["Property", "Value"])
             this.LVWin.OnEvent("ContextMenu", LV_CopyTextMethod := this.GetMethod("LV_CopyText").Bind(this))
-            this.LVWin.ModifyCol(1,100)
-            this.LVWin.ModifyCol(2,140)
+            this.LVWin.ModifyCol(1,60)
+            this.LVWin.ModifyCol(2,180)
             for _, v in ["Title", "Text", "Id", "Location", "Class(NN)", "Process", "PID"]
                 this.LVWin.Add(,v,"")
             this.gViewer.Add("Text", "w100", "Acc Info").SetFont("bold")
@@ -1002,10 +1009,11 @@ class Acc {
         TVAcc_Click(GuiCtrlObj, Info) {
             if this.Capturing
                 return
-            oAcc := this.Stored.TreeView[Info]
-            try this.SBMain.SetText("  Path: " oAcc.Path)
-            this.LVProps_Populate(oAcc)
-
+            try oAcc := this.Stored.TreeView[Info]
+            if IsSet(oAcc) && oAcc {
+                try this.SBMain.SetText("  Path: " oAcc.Path)
+                this.LVProps_Populate(oAcc)
+            }
         }
         ConstructTreeView() {
             this.TVAcc.Delete()
