@@ -6,16 +6,15 @@ Acc library for AHK v2
 Acc v2 in not a port of AHK v1 Acc library, but instead a complete redesign to incorporate more object-oriented approaches. 
 
     1) All Acc elements are now array-like objects, where the "Length" property contains the number of children, 
-    any nth children can be accessed with element[n], and children can be iterated over with for loops.
-    2) Acc main functions are contained in the global Acc object
+       any nth children can be accessed with element[n], and children can be iterated over with for loops.
+    2) Acc main functions are contained in the global Acc class/variable
     3) Element methods are contained inside element objects
     4) Element properties can be used without the "acc" prefix
-    5) ChildIds have been removed (are handled in the backend), but can be accessed through 
-    el.ChildId
+    5) ChildIds have been removed (are handled in the backend), but can be accessed through el.ChildId
     6) Additional methods have been added for elements, such as FindFirst, FindAll, Click
     7) Acc constants are included in the Acc object
     8) AccViewer is built into the library: when ran directly the AccViewer will show, when included
-    in another script then it won't show (but can be accessed by calling Acc.Viewer())
+       in another script then it won't show (but can be accessed by calling Acc.Viewer())
 
 ## Short introduction
 Acc (otherwise known as IAccessible or MSAA) is a library to get information about (and sometimes interact with) windows, controls, and window elements that are otherwise not accessible with AHKs Control functions. 
@@ -29,7 +28,7 @@ To access Acc elements, first you need to get a starting point element (usually 
 
 To get elements from the window element, you can use the Acc path from AccViewer: for example `oEl := oAcc[4,1,4]` would get the windows 4th sub-element, then the sub-elements 1st child, and then its 4th child.  
 
-All the properties in AccViewer can be accessed from the element: `oEl.Name` will get that elements' name or throw an error if the name doesn't exist. Most properties are read-only, but the Value property can sometimes be changed with `oEl.Value := "newvalue"`  
+All the properties displayed in AccViewer can be accessed from the element: `oEl.Name` will get that elements' name or throw an error if the name doesn't exist. Most properties are read-only, but the Value property can sometimes be changed with `oEl.Value := "newvalue"`  
 
 Element methods can be used in the same way. To do the default action (usually clicking), use `oEl.DoDefaultAction()`, to highlight the element for 2 seconds use `oEl.Highlight(2000)`. Dump info about a specific element with `oEl.Dump()` and dump info about sub-elements as well with `oEl.DumpAll()` (to get paths and info about all elements in a window, use it on the window element: `MsgBox( Acc.ObjectFromWindow(WinTitle).DumpAll() )`  
 
