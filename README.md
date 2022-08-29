@@ -101,6 +101,7 @@ Explanations for the constants are available [in Microsoft documentations](https
     Location            => Returns the object's current screen location in an object {x,y,w,h}
     Children            => Returns all children as an array (usually not required)
     Exists              => Checks whether the element is still alive and accessible
+    ControlID           => ID (hwnd) of the control associated with the element
     WinID               => ID of the window the element belongs to
     oAcc                => ComObject of the underlying IAccessible (this is usually not needed)
     childId             => childId of the underlying IAccessible (this is usually not needed)

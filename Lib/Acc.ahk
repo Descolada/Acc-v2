@@ -679,11 +679,11 @@ class Acc {
 
         ; Outputs relevant information about the element
         Dump() {
-            Value := "", Name := "", StateText := "", State := "", DefaultAction := "", Description := "", KeyboardShortcut := "", Help := "", Pos := {x:0,y:0,w:0,h:0}
-            for _, v in ["Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"]
+            RoleText := "", Role := "", Value := "", Name := "", StateText := "", State := "", DefaultAction := "", Description := "", KeyboardShortcut := "", Help := "", Pos := {x:0,y:0,w:0,h:0}
+            for _, v in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"]
                 try %v% := this.%v%
             try Pos := this.Location
-            return "RoleText: " Acc.GetRoleText(Role := this.Role) " Role: " Role " [Location: {x:" Pos.x ",y:" Pos.y ",w:" Pos.w ",h:" Pos.h "}]" " [Name: " (Name ?? "") "] [Value: " (Value ?? "")  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "")
+            return "RoleText: " RoleText " Role: " Role " [Location: {x:" Pos.x ",y:" Pos.y ",w:" Pos.w ",h:" Pos.h "}]" " [Name: " (Name ?? "") "] [Value: " (Value ?? "")  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "")
         }
 
         DumpAll() {
@@ -866,8 +866,11 @@ class Acc {
     }
 
     static GetRoleText(nRole) {
-        if !IsInteger(nRole)
+        if !IsInteger(nRole) {
+            if (Type(nRole) = "String") && (nRole != "")
+                return nRole
             throw TypeError("The specified role is not an integer!",-2)
+        }
         nRole := Integer(nRole)
         nSize := DllCall("oleacc\GetRoleText", "Uint", nRole, "Ptr", 0, "Uint", 0)
         VarSetStrCapacity(&sRole, nSize+2)
