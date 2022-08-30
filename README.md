@@ -130,6 +130,9 @@ Explanations for the constants are available [in Microsoft documentations](https
         Waits an element exist that matches a condition or a path. 
         Timeout less than 1 waits indefinitely, otherwise is the wait time in milliseconds
         A timeout throws an error, otherwise the matching element is returned.
+    Normalize(condition)
+        Checks whether the current element or any of its ancestors match the condition, 
+        and returns that element. If no element is found, an error is thrown.
     ValidateCondition(condition)
         Checks whether the element matches a provided condition.
         Everything inside {} is an "and" condition
