@@ -29,16 +29,23 @@
         NAVDIR
         SELECTIONFLAG
         EVENT
+
+        Explanations for the constants are available in Microsoft documentation:
+        https://docs.microsoft.com/en-us/windows/win32/winauto/constants-and-enumerated-types
     
     Acc methods:
         ObjectFromPoint(x:=unset, y:=unset, &idChild := "", activateChromium := True)
+            Gets an Acc element from screen coordinates X and Y (NOT relative to the active window).
         ObjectFromWindow(hWnd:="A", idObject := 0, activateChromium := True)
+            Gets an Acc element from a WinTitle, by default the active window. 
+            Additionally idObject can be specified from Acc.OBJID constants (eg to get the Caret location).
+        GetRootElement()
+            Gets the Acc element for the Desktop
         ActivateChromiumAccessibility(hWnd) 
             Sends the WM_GETOBJECT message to the Chromium document element and waits for the 
             app to be accessible to Acc. This is called when ObjectFromPoint or ObjectFromWindow 
             activateChromium flag is set to True. A small performance increase may be gotten 
             if that flag is set to False when it is not needed.
-        GetRootElement()
         RegisterWinEvent(event, callback) 
             Registers an event from Acc.EVENT to a callback function and returns a new object
                 containing the WinEventHook
@@ -46,10 +53,10 @@
                 CallbackFunction(oAcc, Event, EventTime)
             Unhooking of the event handler will happen once the returned object is destroyed
             (either when overwritten by a constant, or when the script closes).
-        SetWinEventHook(eventMin, eventMax, pCallback)
-        UnhookWinEvent(hHook)
 
         Legacy methods:
+        SetWinEventHook(eventMin, eventMax, pCallback)
+        UnhookWinEvent(hHook)
         ObjectFromPath(ChildPath, hWnd:="A")    => Same as ObjectFromWindow[comma-separated path]
         GetRoleText(nRole)                      => Same as element.RoleText
         GetStateText(nState)                    => Same as element.StateText
@@ -81,14 +88,18 @@
         childId             => childId of the underlying IAccessible
     
     IAccessible element methods:
-        Select(flags)       => modifies the selection or moves the keyboard focus of the specified object. flags can be any of the SELECTIONFLAG constants
-        DoDefaultAction()   => performs the specified object's default action. Not all objects have a default action.
-        HitTest(x, y)       => retrieves the child element or child object that is displayed at a specific point on the screen.
-                               This shouldn't be used, since Acc.ObjectFromPoint uses this internally
-        GetNthChild(n)      => Equal to element[n]
+        Select(flags)
+            Modifies the selection or moves the keyboard focus of the specified object. 
+            flags can be any of the SELECTIONFLAG constants
+        DoDefaultAction()
+            Performs the specified object's default action. Not all objects have a default action.
+        GetNthChild(n)
+            This is equal to element[n]
         GetLocation(relativeTo:="")
-            Returns an object containing the x, y coordinates and width and height: {x:x coordinate, y:y coordinate, w:width, h:height}. relativeTo can be client, window or screen, default is A_CoordModeMouse.
-        IsEqual(oCompare)   => Checks whether the element is equal to another element (oCompare)
+            Returns an object containing the x, y coordinates and width and height: {x:x coordinate, y:y coordinate, w:width, h:height}. 
+            relativeTo can be client, window or screen, default is A_CoordModeMouse.
+        IsEqual(oCompare)
+            Checks whether the element is equal to another element (oCompare)
         FindFirst(condition, scope:=4) 
             Finds the first element matching the condition (see description under ValidateCondition)
             Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children)
@@ -100,6 +111,9 @@
             Waits an element exist that matches a condition or a path. 
             Timeout less than 1 waits indefinitely, otherwise is the wait time in milliseconds
             A timeout throws an error, otherwise the matching element is returned.
+        Normalize(condition)
+            Checks whether the current element or any of its ancestors match the condition, 
+            and returns that element. If no element is found, an error is thrown.
         ValidateCondition(condition)
             Checks whether the element matches a provided condition.
             Everything inside {} is an "and" condition
@@ -115,8 +129,10 @@
             {Name:"Something", RoleText:"something else"} => Name must match "Something" and RoleText must match "something else"
             [{Name:"Something", Role:42}, {Name:"Something2", RoleText:"something else"}] => Name=="Something" and Role==42 OR Name=="Something2" and RoleText=="something else"
             {Name:"Something", not:[RoleText:"something", RoleText:"something else"]} => Name must match "something" and RoleText cannot match "something" nor "something else"
-        Dump()      => Outputs relevant information about the element (Name, Value, Location etc)
-        DumpAll()   => Outputs relevant information about the element and all descendants of the element
+        Dump()
+            Outputs relevant information about the element (Name, Value, Location etc)
+        DumpAll()
+            Outputs relevant information about the element and all descendants of the element
         Highlight(showTime:=unset, color:="Red", d:=2)
             Highlights the element for a chosen period of time
             Possible showTime values:
@@ -136,7 +152,9 @@
             If WhichButton is a number, then a Sleep will be called afterwards. Ex: ControlClick(200) will sleep 200ms after clicking. Same for ControlClick("ahk_id 12345", 200)
         Navigate(navDir)
             Navigates in one of the directions specified by Acc.NAVDIR constants. Not all elements implement this method. 
-
+        HitTest(x, y)
+            Retrieves the child element or child object that is displayed at a specific point on the screen.
+            This shouldn't be used, since Acc.ObjectFromPoint uses this internally
 */
 
 #DllLoad oleacc
@@ -444,7 +462,7 @@ class Acc {
         DefaultAction => (this.oAcc.accDefaultAction[this.childId])
         Focus => (this.IAccessibleFromVariant(this.oAcc.accFocus())) 
         Selection => (this.IAccessibleFromVariant(this.oAcc.accSelection())) 
-        Parent => (Acc.IAccessible(Acc.Query(this.oAcc.accParent)))
+        Parent => (this.IsChild ? Acc.IAccessible(this.oAcc,,this.wId) : Acc.IAccessible(Acc.Query(this.oAcc.accParent)))
         ControlID {
             get {
                 if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", ComObjValue(this.oAcc), "uint*", &hWnd:=0) = 0
@@ -611,6 +629,24 @@ class Acc {
             }
             throw Error("WaitElementExist timed out")
         }
+        /*
+            Checks whether the current element or any of its ancestors match the condition, 
+            and returns that element. If no element is found, an error is thrown.
+        */
+        Normalize(condition) {
+            if this.ValidateCondition(condition)
+                return this
+            oEl := this
+            Loop {
+                try {
+                    oEl := oEl.Parent
+                    if oEl.ValidateCondition(condition)
+                        return oEl
+                } catch
+                    break
+            }
+            throw Error("Matching Acc object not found")
+        }
 
         /*
             Checks whether the element matches a provided condition.
@@ -670,7 +706,7 @@ class Acc {
                                 if this.%lprop% != lval
                                     return 0
                             }
-                        } else if ((prop = "not") && this.ValidateCondition(cond)) || !this.ValidateCondition(cond)
+                        } else if ((prop = "not") ? this.ValidateCondition(cond) : !this.ValidateCondition(cond))
                             return 0
                 }
             }
@@ -1039,7 +1075,9 @@ class Acc {
             try elDesc := " `"" oAcc.Name "`""
             catch
                 elDesc := " `"`""
-            elDesc := oAcc.RoleText elDesc
+            try elDesc := oAcc.RoleText elDesc
+            catch
+                elDesc := "`"`"" elDesc
             this.Stored.TreeView[TWEl := this.TVAcc.Add(elDesc, parent, "Expand")] := oAcc.DefineProp("Path", {value:path})
             for k, v in oAcc
                 this.RecurseTreeView(v, TWEl, path (path?",":"") k)
