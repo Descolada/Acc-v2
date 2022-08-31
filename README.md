@@ -82,7 +82,13 @@ Explanations for the constants are available [in Microsoft documentations](https
 
 # Acc element properties
     Element[n]          => Gets the nth element. Multiple of these can be used like a path:
-                            Element[4,1]. Conditions (see ValidateCondition) are supported: Element[4,{Name:"Something"}]
+                                Element[4,1,4] will select 4th childs 1st childs 4th child
+                            Conditions (see ValidateCondition) are supported: 
+                                Element[4,{Name:"Something"}] will select the fourth childs first child matching the name "Something"
+                            Conditions also accept an index (or i) parameter to select from multiple similar elements
+                                Element[{Name:"Something", i:3}] selects the third element of elements with name "Something"
+                            Negative index will select from the last element
+                                Element[{Name:"Something", i:-1}] selects the last element of elements with name "Something"
     Name                => Gets or sets the name. All objects support getting this property.
     Value               => Gets or sets the value. Not all objects have a value.
     Role                => Gets the Role of the specified object in integer form. All objects support this property.
@@ -140,17 +146,20 @@ Explanations for the constants are available [in Microsoft documentations](https
         Everything inside [] is an "or" condition
         Object key "not" creates a not condition
 
-        matchmode key defines the MatchMode: 1=must start with; 2=can contain anywhere in string; 3=exact match; RegEx
-        casesensitive key defines case sensitivity: True=case sensitive; False=case insensitive
+        matchmode key (short form: mm) defines the MatchMode: 1=must start with; 2=can contain anywhere in string; 3=exact match; RegEx
+        casesensitive key (short form: cs) defines case sensitivity: True=case sensitive; False=case insensitive
         {Name:"Something"} => Name must match "Something" (case sensitive)
         {Name:"Something", matchmode:2, casesensitive:False} => Name must contain "Something" anywhere inside the Name, case insensitive
         {Name:"Something", RoleText:"something else"} => Name must match "Something" and RoleText must match "something else"
         [{Name:"Something", Role:42}, {Name:"Something2", RoleText:"something else"}] => Name=="Something" and Role==42 OR Name=="Something2" and RoleText=="something else"
-        {Name:"Something", not:[RoleText:"something", RoleText:"something else"]} => Name must match "something" and RoleText cannot match "something" nor "something else"
-    Dump()
+        {Name:"Something", not:[{RoleText:"something", mm:2}, {RoleText:"something else", cs:1}]} => Name must match "something" and RoleText cannot match "something" (with matchmode=2) nor "something else" (casesensitive matching)
+
+    Dump(scope:=1)
         Outputs relevant information about the element (Name, Value, Location etc)
+        Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children); 7=whole subtree (including element)
+            The scope is additive: 3=element itself and direct children.
     DumpAll()
-        Outputs relevant information about the element and all descendants of the element
+        Outputs relevant information about the element and all descendants of the element. This is equivalent to Dump(7)
     Highlight(showTime:=unset, color:="Red", d:=2)
         Highlights the element for a chosen period of time
         Possible showTime values:

@@ -64,7 +64,13 @@
 
     IAccessible element properties:
         Element[n]          => Gets the nth element. Multiple of these can be used like a path:
-                               Element[4,1]. Conditions (see ValidateCondition) are supported: Element[4,{Name:"Something"}]
+                                    Element[4,1,4] will select 4th childs 1st childs 4th child
+                               Conditions (see ValidateCondition) are supported: 
+                                    Element[4,{Name:"Something"}] will select the fourth childs first child matching the name "Something"
+                               Conditions also accept an index (or i) parameter to select from multiple similar elements
+                                    Element[{Name:"Something", i:3}] selects the third element of elements with name "Something"
+                               Negative index will select from the last element
+                                    Element[{Name:"Something", i:-1}] selects the last element of elements with name "Something"
         Name                => Gets or sets the name. All objects support getting this property.
         Value               => Gets or sets the value. Not all objects have a value.
         Role                => Gets the Role of the specified object in integer form. All objects support this property.
@@ -105,6 +111,7 @@
         FindFirst(condition, scope:=4) 
             Finds the first element matching the condition (see description under ValidateCondition)
             Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children)
+                The scope is additive: 3=element itself and direct children.
             The returned element also has the "Path" property with the found elements path
         FindAll(condition, scope:=4)
             Returns an array of elements matching the condition (see description under ValidateCondition)
@@ -122,19 +129,21 @@
             Everything inside [] is an "or" condition
             Object key "not" creates a not condition
 
-            matchmode key defines the MatchMode: 1=must start with; 2=can contain anywhere in string; 3=exact match; RegEx
+            matchmode key (short form: mm) defines the MatchMode: 1=must start with; 2=can contain anywhere in string; 3=exact match; RegEx
 
-            casesensitive key defines case sensitivity: True=case sensitive; False=case insensitive
+            casesensitive key (short form: cs) defines case sensitivity: True=case sensitive; False=case insensitive
 
             {Name:"Something"} => Name must match "Something" (case sensitive)
             {Name:"Something", matchmode:2, casesensitive:False} => Name must contain "Something" anywhere inside the Name, case insensitive
             {Name:"Something", RoleText:"something else"} => Name must match "Something" and RoleText must match "something else"
             [{Name:"Something", Role:42}, {Name:"Something2", RoleText:"something else"}] => Name=="Something" and Role==42 OR Name=="Something2" and RoleText=="something else"
-            {Name:"Something", not:[RoleText:"something", RoleText:"something else"]} => Name must match "something" and RoleText cannot match "something" nor "something else"
-        Dump()
+            {Name:"Something", not:[{RoleText:"something", mm:2}, {RoleText:"something else", cs:1}]} => Name must match "something" and RoleText cannot match "something" (with matchmode=2) nor "something else" (casesensitive matching)
+        Dump(scope:=1)
             Outputs relevant information about the element (Name, Value, Location etc)
+            Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children); 7=whole subtree (including element)
+                The scope is additive: 3=element itself and direct children.
         DumpAll()
-            Outputs relevant information about the element and all descendants of the element
+            Outputs relevant information about the element and all descendants of the element. This is equivalent to Dump(7)
         Highlight(showTime:=unset, color:="Red", d:=2)
             Highlights the element for a chosen period of time
             Possible showTime values:
@@ -144,11 +153,14 @@
                 Negative integer: will highlight for the specified amount of time in ms, but script execution will continue
             color can be any of the Color names or RGB values
             d sets the border width
-        Click(WhichButton:="left", ClickCount:=1, DownOrUp:="", Relative:="")
+        Click(WhichButton:="left", ClickCount:=1, DownOrUp:="", Relative:="", NoActivate:=False)
             Click the center of the element.
-            If WhichButton is a number, then Sleep will be called with that number. Eg Click(200) will sleep 200ms after clicking
-            If ClickCount is a number >=10, then Sleep will be called with that number. To click 10+ times and sleep after, specify "ClickCount SleepTime". Ex: Click("left", 200) will sleep 200ms after clicking. Ex: Click("left", "20 200") will left-click 20 times and then sleep 200ms.
+            If WhichButton is a number, then Sleep will be called with that number. 
+                Eg Click(200) will sleep 200ms after clicking
+            If ClickCount is a number >=10, then Sleep will be called with that number. To click 10+ times and sleep after, specify "ClickCount SleepTime". Ex: Click("left", 200) will sleep 200ms after clicking. 
+                Ex: Click("left", "20 200") will left-click 20 times and then sleep 200ms.
             If Relative is "Rel" or "Relative" then X and Y coordinates are treated as offsets from the current mouse position. Otherwise it expects offset values for both X and Y (eg "-5 10" would offset X by -5 and Y by +10).
+            NoActivate will cause the window not to be brought to focus before clicking.
         ControlClick(WhichButton:="left", ClickCount:=1, Options:="")
             ControlClicks the element after getting relative coordinates with GetLocation("client"). 
             If WhichButton is a number, then a Sleep will be called afterwards. Ex: ControlClick(200) will sleep 200ms after clicking. Same for ControlClick("ahk_id 12345", 200)
@@ -174,6 +186,12 @@ class Acc {
     }
     static PropertyValueGetter := {get: (obj, value) => Acc.PropertyFromValue(obj, value)}
     static RegisteredWinEvents := Map()
+
+    ; Used wherever the scope variable is needed (eg Dump, FindFirst, FindAll)
+    static SCOPE := {ELEMENT:1
+        , CHILDREN:2
+        , DESCENDANTS:4
+        , SUBTREE:7}
 
     ;https://msdn.microsoft.com/en-us/library/windows/desktop/dd373606(v=vs.85).aspx
     static OBJID := {WINDOW:0x00000000
@@ -399,17 +417,29 @@ class Acc {
                 oAcc := this
                 for _, child in params {
                     if IsObject(child) {
-                        oFound := ""
-                        for oCandidate in oAcc.Children {
-                            if oCandidate.ValidateCondition(child) {
-                                oFound := oCandidate
-                                break
+                        condition := child.Clone(), index := 1
+                        for i in ["index", "i"]
+                            if condition.HasOwnProp(i) {
+                                index := condition.%i%
+                                condition.DeleteProp(i)
                             }
+                        if index < 0 {
+                            oFound := oAcc.FindAll(condition, 2)
+                            if !oFound.Length
+                                throw Error("No child found matching the condition at index " index, -2)
+                            oAcc := oFound[oFound.Length+index+1]
+                        } else {
+                            oFound := "", count := 0
+                            for oCandidate in oAcc.Children {
+                                if oCandidate.ValidateCondition(condition) && (++count = index) {
+                                    oFound := oCandidate
+                                    break
+                                }
+                            }
+                            if !oFound
+                                throw Error("No child found matching the condition at index " _, -2)
+                            oAcc := oFound                               
                         }
-                        if oFound
-                            oAcc := oFound
-                        else
-                            throw Error("No child found matching the condition at index " _)
                     } else
                         oAcc := oAcc.GetNthChild(child)
                 }
@@ -687,16 +717,20 @@ class Acc {
                 return 0
             }
             matchmode := 3, casesensitive := 1, notCond := False
-            
-            if oCond.HasOwnProp("matchmode")
-                matchmode := oCond.matchmode
-            if oCond.HasOwnProp("casesensitive")
-                casesensitive := oCond.casesensitive
-            for prop, cond in oCond.OwnProps() {
+            oCondClone := oCond.Clone()
+            for p in ["matchmode", "mm"]
+                if oCondClone.HasOwnProp(p) {
+                    matchmode := oCondClone.%p%
+                    oCondClone.DeleteProp(p)
+                }
+            for p in ["casesensitive", "cs"]
+                if oCondClone.HasOwnProp(p) {
+                    casesensitive := oCondClone.%p%
+                    oCondClone.DeleteProp(p)
+                }
+            for prop, cond in oCondClone.OwnProps() {
                 switch Type(cond) { ; and condition
                     case "String", "Integer":
-                        if prop ~= "casesensitive|matchmode"
-                            continue
                         propValue := ""
                         try propValue := this.%prop%
                         switch matchmode, 0 {
@@ -730,16 +764,23 @@ class Acc {
         }
 
         ; Outputs relevant information about the element
-        Dump() {
-            RoleText := "", Role := "", Value := "", Name := "", StateText := "", State := "", DefaultAction := "", Description := "", KeyboardShortcut := "", Help := "", Pos := {x:0,y:0,w:0,h:0}
-            for _, v in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"]
-                try %v% := this.%v%
-            try Pos := this.Location
-            return "RoleText: " RoleText " Role: " Role " [Location: {x:" Pos.x ",y:" Pos.y ",w:" Pos.w ",h:" Pos.h "}]" " [Name: " (Name ?? "") "] [Value: " (Value ?? "")  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "")
-        }
+        Dump(scope:=1) {
+            if scope&4
+                return RecurseTree(this, scope&1 ? this.Dump() "`n" : "")
+            out := ""
+            if scope&1 {
+                RoleText := "", Role := "", Value := "", Name := "", StateText := "", State := "", DefaultAction := "", Description := "", KeyboardShortcut := "", Help := "", Pos := {x:0,y:0,w:0,h:0}
+                for _, v in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"]
+                    try %v% := this.%v%
+                try Pos := this.Location
+                out := "RoleText: " RoleText " Role: " Role " [Location: {x:" Pos.x ",y:" Pos.y ",w:" Pos.w ",h:" Pos.h "}]" " [Name: " (Name ?? "") "] [Value: " (Value ?? "")  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "") "`n"
+            }
+            if scope&2 {
+                for n, oChild in this.Children
+                    out .= n ": " oChild.Dump() "`n"
+            }
+            return RTrim(out, "`n")
 
-        DumpAll() {
-            return RecurseTree(this, this.Dump() "`n")
             RecurseTree(oAcc, tree, path:="") {
                 try {
                     if !oAcc.Length
@@ -754,6 +795,9 @@ class Acc {
                 return tree
             }
         }
+
+        DumpAll() => this.Dump(5)
+
         /*
             Highlights the element for a chosen period of time
             Possible showTime values:
@@ -798,7 +842,7 @@ class Acc {
         ; If WhichButton is a number, then Sleep will be called with that number. Eg Click(200) will sleep 200ms after clicking
         ; If ClickCount is a number >=10, then Sleep will be called with that number. To click 10+ times and sleep after, specify "ClickCount SleepTime". Ex: Click("left", 200) will sleep 200ms after clicking. Ex: Click("left", "20 200") will left-click 20 times and then sleep 200ms.
         ; If Relative is "Rel" or "Relative" then X and Y coordinates are treated as offsets from the current mouse position. Otherwise it expects offset values for both X and Y (eg "-5 10" would offset X by -5 and Y by +10).
-        Click(WhichButton:="left", ClickCount:=1, DownOrUp:="", Relative:="") {		
+        Click(WhichButton:="left", ClickCount:=1, DownOrUp:="", Relative:="", NoActivate:=False) {		
             rel := [0,0], pos := this.GetLocation()
             if (Relative && !InStr(Relative, "rel"))
                 rel := StrSplit(Relative, " "), Relative := ""
@@ -810,6 +854,10 @@ class Acc {
                 cCount := sCount[1], SleepTime := sCount[2]
             } else if ClickCount > 9 {
                 SleepTime := cCount, cCount := 1
+            }
+            if !NoActivate {
+                WinActivate(this.wId)
+                WinWaitActive(this.wId)
             }
             Click((pos.x+pos.w//2+rel[1]) " " (pos.y+pos.h//2+rel[2]) " " WhichButton (ClickCount ? " " ClickCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
             Sleep(SleepTime)
