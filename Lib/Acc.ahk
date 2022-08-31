@@ -63,6 +63,8 @@
         Query(pAcc)                             => For internal use
 
     IAccessible element properties:
+        Element[n]          => Gets the nth element. Multiple of these can be used like a path:
+                               Element[4,1]. Conditions (see ValidateCondition) are supported: Element[4,{Name:"Something"}]
         Name                => Gets or sets the name. All objects support getting this property.
         Value               => Gets or sets the value. Not all objects have a value.
         Role                => Gets the Role of the specified object in integer form. All objects support this property.
@@ -395,8 +397,22 @@ class Acc {
         __Item[params*] {
             get {
                 oAcc := this
-                for _, child in params
-                    oAcc := oAcc.GetNthChild(child)
+                for _, child in params {
+                    if IsObject(child) {
+                        oFound := ""
+                        for oCandidate in oAcc.Children {
+                            if oCandidate.ValidateCondition(child) {
+                                oFound := oCandidate
+                                break
+                            }
+                        }
+                        if oFound
+                            oAcc := oFound
+                        else
+                            throw Error("No child found matching the condition at index " _)
+                    } else
+                        oAcc := oAcc.GetNthChild(child)
+                }
                 return oAcc
             }
         }

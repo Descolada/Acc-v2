@@ -81,7 +81,8 @@ Some examples of how Acc.ahk can be used are included in the Examples folder.
 Explanations for the constants are available [in Microsoft documentations](https://docs.microsoft.com/en-us/windows/win32/winauto/constants-and-enumerated-types).
 
 # Acc element properties
-
+    Element[n]          => Gets the nth element. Multiple of these can be used like a path:
+                            Element[4,1]. Conditions (see ValidateCondition) are supported: Element[4,{Name:"Something"}]
     Name                => Gets or sets the name. All objects support getting this property.
     Value               => Gets or sets the value. Not all objects have a value.
     Role                => Gets the Role of the specified object in integer form. All objects support this property.
