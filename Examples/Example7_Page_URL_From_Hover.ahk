@@ -1,4 +1,5 @@
 ﻿#include ..\Lib\Acc.ahk
+#Requires AutoHotkey v2.0-a
 
 ; Returns the URL from the document element of a web browser. 
 ; Hover over a browser with the cursor to test it out.
