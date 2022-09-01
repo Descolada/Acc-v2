@@ -160,7 +160,7 @@
             If ClickCount is a number >=10, then Sleep will be called with that number. To click 10+ times and sleep after, specify "ClickCount SleepTime". Ex: Click("left", 200) will sleep 200ms after clicking. 
                 Ex: Click("left", "20 200") will left-click 20 times and then sleep 200ms.
             If Relative is "Rel" or "Relative" then X and Y coordinates are treated as offsets from the current mouse position. Otherwise it expects offset values for both X and Y (eg "-5 10" would offset X by -5 and Y by +10).
-            NoActivate will cause the window not to be brought to focus before clicking.
+            NoActivate will cause the window not to be brought to focus before clicking if the clickable point is not visible on the screen.
         ControlClick(WhichButton:="left", ClickCount:=1, Options:="")
             ControlClicks the element after getting relative coordinates with GetLocation("client"). 
             If WhichButton is a number, then a Sleep will be called afterwards. Ex: ControlClick(200) will sleep 200ms after clicking. Same for ControlClick("ahk_id 12345", 200)
@@ -843,10 +843,9 @@ class Acc {
         ; If ClickCount is a number >=10, then Sleep will be called with that number. To click 10+ times and sleep after, specify "ClickCount SleepTime". Ex: Click("left", 200) will sleep 200ms after clicking. Ex: Click("left", "20 200") will left-click 20 times and then sleep 200ms.
         ; If Relative is "Rel" or "Relative" then X and Y coordinates are treated as offsets from the current mouse position. Otherwise it expects offset values for both X and Y (eg "-5 10" would offset X by -5 and Y by +10).
         Click(WhichButton:="left", ClickCount:=1, DownOrUp:="", Relative:="", NoActivate:=False) {		
-            rel := [0,0], pos := this.GetLocation()
+            rel := [0,0], pos := this.Location, saveCoordMode := A_CoordModeMouse, cCount := 1, SleepTime := -1
             if (Relative && !InStr(Relative, "rel"))
                 rel := StrSplit(Relative, " "), Relative := ""
-            cCount := 1, SleepTime := -1
             if IsInteger(WhichButton)
                 SleepTime := WhichButton, WhichButton := "left"
             if !IsInteger(ClickCount) && InStr(ClickCount, " ") {
@@ -855,11 +854,13 @@ class Acc {
             } else if ClickCount > 9 {
                 SleepTime := cCount, cCount := 1
             }
-            if !NoActivate {
+            if (!NoActivate && (Acc.WindowFromPoint(pos.x+pos.w//2+rel[1], pos.y+pos.h//2+rel[2]) != this.wId)) {
                 WinActivate(this.wId)
                 WinWaitActive(this.wId)
             }
-            Click((pos.x+pos.w//2+rel[1]) " " (pos.y+pos.h//2+rel[2]) " " WhichButton (ClickCount ? " " ClickCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
+            CoordMode("Mouse", "Screen")
+            Click(pos.x+pos.w//2+rel[1] " " pos.y+pos.h//2+rel[2] " " WhichButton (ClickCount ? " " ClickCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
+            CoordMode("Mouse", saveCoordMode)
             Sleep(SleepTime)
         }
 
@@ -1009,6 +1010,10 @@ class Acc {
     static UnhookWinEvent(hHook) {
         Return DllCall("UnhookWinEvent", "Ptr", hHook)
     }
+
+	static WindowFromPoint(X, Y) { ; by SKAN and Linear Spoon
+		return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", Y << 32 | X), "UInt", 2)
+	}
 
     class Viewer {
         __New() {
