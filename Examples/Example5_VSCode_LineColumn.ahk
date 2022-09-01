@@ -1,4 +1,6 @@
 #include ..\Lib\Acc.ahk
+#Requires AutoHotkey v2.0-a
+
 Loop {
     lnCol := GetVSCodeLnCol()
     ToolTip("Ln " lnCol.Ln ", Col " lnCol.Col "`nFound elements path: " lnCol.Path)

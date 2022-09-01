@@ -1,4 +1,6 @@
 ﻿#include ..\Lib\Acc.ahk
+#Requires AutoHotkey v2.0-a
+
 Persistent()
 
 ; This won't work without assigning the registered event object to a variable
