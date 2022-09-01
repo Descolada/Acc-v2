@@ -1,4 +1,6 @@
 #include ..\Lib\Acc.ahk
+#Requires AutoHotkey v2.0-a
+
 SetTitleMatchMode(2)
 
 Run("explore C:\")

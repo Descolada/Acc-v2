@@ -1,4 +1,5 @@
 ﻿#include ..\Lib\Acc.ahk
+#Requires AutoHotkey v2.0-a
 
 Run("notepad.exe")
 WinWaitActive("ahk_exe notepad.exe")
