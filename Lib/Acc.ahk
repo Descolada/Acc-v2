@@ -580,6 +580,9 @@ class Acc {
         }
     
         GetNthChild(n) {
+            if !IsNumber(n)
+                throw TypeError("Child must be an integer", -1)
+            n := Integer(n)
             cChildren := this.oAcc.accChildCount
             if n < 1 || n > cChildren
                 throw IndexError("Child index " n " is out of bounds", -1)
@@ -814,8 +817,8 @@ class Acc {
                 range := []
                 return
             }
-            loc := this.Location
-            if !IsObject(loc)
+            try loc := this.Location
+            if !IsSet(loc) || !IsObject(loc)
                 return
             Loop 4 {
                 range.Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
@@ -1017,7 +1020,7 @@ class Acc {
 
     class Viewer {
         __New() {
-            this.Stored := {mwId:0, Trees:Map(), TreeView:Map()}
+            this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map()}
             this.Capturing := False
             this.gViewer := Gui("AlwaysOnTop Resize","AccViewer")
             this.gViewer.OnEvent("Close", (*) => ExitApp())
@@ -1043,14 +1046,20 @@ class Acc {
             this.SBMain.OnEvent("Click", this.GetMethod("SBMain_Click").Bind(this))
             this.SBMain.OnEvent("ContextMenu", this.GetMethod("SBMain_Click").Bind(this))
             this.gViewer.Add("Text", "x278 y10 w100", "Acc Tree").SetFont("bold")
-            this.TVAcc := this.gViewer.Add("TreeView", "x275 y25 w250 h390")
+            this.TVAcc := this.gViewer.Add("TreeView", "x275 y25 w250 h390 -0x800")
             this.TVAcc.OnEvent("Click", this.GetMethod("TVAcc_Click").Bind(this))
+            this.TVAcc.OnEvent("ContextMenu", this.GetMethod("TVAcc_ContextMenu").Bind(this))
             this.TVAcc.Add("Start capturing to show tree")
+            this.TextFilterTVAcc := this.gViewer.Add("Text", "x275 y428", "Filter:")
+            this.EditFilterTVAcc := this.gViewer.Add("Edit", "x305 y425 w100")
+            this.EditFilterTVAcc.OnEvent("Change", this.GetMethod("EditFilterTVAcc_Change").Bind(this))
             this.gViewer.Show()
         }
         gViewer_Size(GuiObj, MinMax, Width, Height) {
             this.TVAcc.GetPos(&TVAccX, &TVAccY, &TVAccWidth, &TVAccHeight)
-            this.TVAcc.Move(,,Width-TVAccX-10,Height-TVAccY-30)
+            this.TVAcc.Move(,,Width-TVAccX-10,Height-TVAccY-50)
+            this.TextFilterTVAcc.Move(TVAccX, Height-42)
+            this.EditFilterTVAcc.Move(TVAccX+30, Height-45)
             this.TVAcc.GetPos(&LVPropsX, &LVPropsY, &LVPropsWidth, &LVPropsHeight)
             this.LVProps.Move(,,,Height-LVPropsY-225)
             this.ButCapture.Move(,Height -55)
@@ -1119,21 +1128,71 @@ class Acc {
             Location := {x:0,y:0,w:0,h:0}, RoleText := "", Role := "", Value := "", Name := "", StateText := "", State := "", DefaultAction := "", Description := "", KeyboardShortcut := "", Help := "", ChildId := ""
             for _, v in ["RoleText", "Role", "Value", "Name", "Location", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId"] {
                 try %v% := oAcc.%v%
-                this.LVProps.Add(,v, v = "Location" ? ("x: " %v%.x " y: " %v%.y " w: " %v%.w " h: " %v%.h) :%v%)
+                this.LVProps.Add(,v, v = "Location" ? ("x: " %v%.x " y: " %v%.y " w: " %v%.w " h: " %v%.h) : %v%)
             }
         }
         TVAcc_Click(GuiCtrlObj, Info) {
             if this.Capturing
                 return
-            try oAcc := this.Stored.TreeView[Info]
+            try oAcc := this.EditFilterTVAcc.Value ? this.Stored.FilteredTreeView[Info] : this.Stored.TreeView[Info]
             if IsSet(oAcc) && oAcc {
                 try this.SBMain.SetText("  Path: " oAcc.Path)
                 this.LVProps_Populate(oAcc)
             }
         }
+        TVAcc_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
+            TVAcc_Menu := Menu()
+            try oAcc := this.EditFilterTVAcc.Value ? this.Stored.FilteredTreeView[Item] : this.Stored.TreeView[Item]
+            if IsSet(oAcc)
+                TVAcc_Menu.Add("Copy to Clipboard", (*) => A_Clipboard := oAcc.Dump())
+            TVAcc_Menu.Add("Copy Tree to Clipboard", (*) => A_Clipboard := Acc.ObjectFromWindow(this.Stored.mwId).DumpAll())
+            TVAcc_Menu.Show()
+        }
+        EditFilterTVAcc_Change(GuiCtrlObj, Info, *) {
+            static TimeoutFunc := "", ChangeActive := False
+            if !this.Stored.TreeView.Count
+                return
+            if (Info != "DoAction") || ChangeActive {
+                if !TimeoutFunc
+                    TimeoutFunc := this.GetMethod("EditFilterTVAcc_Change").Bind(this, GuiCtrlObj, "DoAction")
+                SetTimer(TimeoutFunc, -500)
+                return
+            }
+            ChangeActive := True
+            this.Stored.FilteredTreeView := Map(), parents := Map()
+            if !(searchPhrase := this.EditFilterTVAcc.Value) {
+                this.ConstructTreeView()
+                ChangeActive := False
+                return
+            }
+            this.TVAcc.Delete()
+            temp := this.TVAcc.Add("Searching...")
+            Sleep 40
+            this.TVAcc.Opt("-Redraw")
+            this.TVAcc.Delete()
+            for index, oAcc in this.Stored.TreeView {
+                for _, prop in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId"] {
+                    try {
+                        if InStr(oAcc.%Prop%, searchPhrase) {
+                            if !parents.Has(prop)
+                                parents[prop] := this.TVAcc.Add(prop,, "Expand")
+                            this.Stored.FilteredTreeView[this.TVAcc.Add(this.GetShortDescription(oAcc), parents[prop], "Expand")] := oAcc
+                        }
+                    }
+                }
+            }
+            if !this.Stored.FilteredTreeView.Count
+                this.TVAcc.Add("No results found matching `"" searchPhrase "`"")
+            this.TVAcc.Opt("+Redraw")
+            TimeoutFunc := "", ChangeActive := False
+        }
         ConstructTreeView() {
             this.TVAcc.Delete()
+            this.TVAcc.Add("Constructing Tree, please wait...")
+            Sleep 40
             this.TVAcc.Opt("-Redraw")
+            this.TVAcc.Delete()
+            this.Stored.TreeView := Map()
             this.RecurseTreeView(Acc.ObjectFromWindow(this.Stored.mwId))
             this.TVAcc.Opt("+Redraw")
             for k, v in this.Stored.TreeView
@@ -1141,15 +1200,17 @@ class Acc {
                     this.TVAcc.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " v.Path)
         }
         RecurseTreeView(oAcc, parent:="", path:="") {
+            this.Stored.TreeView[TWEl := this.TVAcc.Add(this.GetShortDescription(oAcc), parent, "Expand")] := oAcc.DefineProp("Path", {value:path})
+            for k, v in oAcc
+                this.RecurseTreeView(v, TWEl, path (path?",":"") k)
+        }
+        GetShortDescription(oAcc) {
+            elDesc := " `"`""
             try elDesc := " `"" oAcc.Name "`""
-            catch
-                elDesc := " `"`""
             try elDesc := oAcc.RoleText elDesc
             catch
                 elDesc := "`"`"" elDesc
-            this.Stored.TreeView[TWEl := this.TVAcc.Add(elDesc, parent, "Expand")] := oAcc.DefineProp("Path", {value:path})
-            for k, v in oAcc
-                this.RecurseTreeView(v, TWEl, path (path?",":"") k)
+            return elDesc
         }
     }
 }
