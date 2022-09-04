@@ -620,8 +620,13 @@ class Acc {
             try loc1 := this.Location, loc2 := oCompare.Location
             catch 
                 return 0
-            if (loc1.x != loc2.x) || (loc1.y != loc2.y) || (loc1.w != loc2.w) || (loc1.h != loc2.h) || (this.Role != oCompare.Role)
+            if (loc1.x != loc2.x) || (loc1.y != loc2.y) || (loc1.w != loc2.w) || (loc1.h != loc2.h)
                 return 0
+            for _, v in ((loc1.x = 0) && (loc1.y = 0) && (loc1.w = 0) && (loc1.h = 0)) ? ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"] : ["Role", "Name"]
+                try {
+                    if this.%v% != oCompare.%v%
+                        return 0
+                }
             return 1
         }
 
