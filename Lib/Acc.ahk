@@ -71,6 +71,9 @@
                                     Element[{Name:"Something", i:3}] selects the third element of elements with name "Something"
                                Negative index will select from the last element
                                     Element[{Name:"Something", i:-1}] selects the last element of elements with name "Something"
+                               Since index/i needs to be a key-value pair, then to use it with an "or" condition
+                               it must be inside an object ("and" condition), for example with key "or":
+                                    Element[{or:[{Name:"Something"},{Name:"Something else"}], i:2}]
         Name                => Gets or sets the name. All objects support getting this property.
         Value               => Gets or sets the value. Not all objects have a value.
         Role                => Gets the Role of the specified object in integer form. All objects support this property.
@@ -113,6 +116,14 @@
             Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children)
                 The scope is additive: 3=element itself and direct children.
             The returned element also has the "Path" property with the found elements path
+
+            FindFirst conditions also accept an index (or i) parameter to search for i-th element:
+                FindFirst({Name:"Something", i:3}) finds the third element with name "Something"
+            Negative index reverses the search direction:
+                FindFirst({Name:"Something", i:-1}) finds the last element with name "Something"
+            Since index/i needs to be a key-value pair, then to use it with an "or" condition
+            it must be inside an object ("and" condition), for example with key "or":
+                FindFirst({or:[{Name:"Something"}, {Name:"Something else"}], index:2})
         FindAll(condition, scope:=4)
             Returns an array of elements matching the condition (see description under ValidateCondition)
             The returned elements also have the "Path" property with the found elements path
@@ -125,19 +136,19 @@
             and returns that element. If no element is found, an error is thrown.
         ValidateCondition(condition)
             Checks whether the element matches a provided condition.
-            Everything inside {} is an "and" condition
+            Everything inside {} is an "and" condition, or a singular condition with options
             Everything inside [] is an "or" condition
-            Object key "not" creates a not condition
-
-            matchmode key (short form: mm) defines the MatchMode: 1=must start with; 2=can contain anywhere in string; 3=exact match; RegEx
-
-            casesensitive key (short form: cs) defines case sensitivity: True=case sensitive; False=case insensitive
+            "not" key creates a not condition
+            "matchmode" key (short form: "mm") defines the MatchMode: 1=must start with; 2=can contain anywhere in string; 3=exact match; RegEx
+            "casesensitive" key (short form: "cs") defines case sensitivity: True=case sensitive; False=case insensitive
+            Any other key (but usually "or") can be used to use "or" condition inside "and" condition.
 
             {Name:"Something"} => Name must match "Something" (case sensitive)
             {Name:"Something", matchmode:2, casesensitive:False} => Name must contain "Something" anywhere inside the Name, case insensitive
             {Name:"Something", RoleText:"something else"} => Name must match "Something" and RoleText must match "something else"
             [{Name:"Something", Role:42}, {Name:"Something2", RoleText:"something else"}] => Name=="Something" and Role==42 OR Name=="Something2" and RoleText=="something else"
             {Name:"Something", not:[{RoleText:"something", mm:2}, {RoleText:"something else", cs:1}]} => Name must match "something" and RoleText cannot match "something" (with matchmode=2) nor "something else" (casesensitive matching)
+            {or:[{Name:"Something"},{Name:"Something else"}], or2:[{Role:20},{Role:42}]}
         Dump(scope:=1)
             Outputs relevant information about the element (Name, Value, Location etc)
             Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children); 7=whole subtree (including element)
@@ -441,7 +452,7 @@ class Acc {
                             oAcc := oFound                               
                         }
                     } else
-                        oAcc := oAcc.GetNthChild(child)
+                        oAcc := child ? oAcc.GetNthChild(child) : oAcc
                 }
                 return oAcc
             }
@@ -622,11 +633,23 @@ class Acc {
                 return 0
             if (loc1.x != loc2.x) || (loc1.y != loc2.y) || (loc1.w != loc2.w) || (loc1.h != loc2.h)
                 return 0
-            for _, v in ((loc1.x = 0) && (loc1.y = 0) && (loc1.w = 0) && (loc1.h = 0)) ? ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"] : ["Role", "Name"]
-                try {
-                    if this.%v% != oCompare.%v%
+            for _, v in ((loc1.x = 0) && (loc1.y = 0) && (loc1.w = 0) && (loc1.h = 0)) ? ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"] : ["Role", "Name"] {
+                try v1 := this.%v%
+                catch { ; v1 unset
+                    try v2 := oCompare.%v%
+                    catch { ; both unset, continue
+                        continue
+                    }
+                    return 0 ; v1 unset, v2 set 
+                }
+                try v2 := oCompare.%v%
+                catch { ; v1 set, v2 unset
+                    return 0
+                } else {
+                    if v1 != v2 ; both set
                         return 0
                 }
+            }
             return 1
         }
 
@@ -634,20 +657,38 @@ class Acc {
         ; Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children)
         ; The returned element also has the "Path" property with the found elements path
         FindFirst(condition, scope:=4) {
+            index := 1, reverse := False
+            for i in ["index", "i"]
+                if condition.HasOwnProp(i) {
+                    if (index := condition.%i%) < 0
+                        reverse := True, index := -index
+                    condition := condition.Clone(), condition.DeleteProp(i)
+                }
             if scope&1
-                if this.ValidateCondition(condition)
+                if this.ValidateCondition(condition) && (--index = 0)
                     return this.DefineProp("Path", {value:""})
             if scope>1
-                return RecursiveFind(this, condition, scope)
+                return reverse ? ReverseRecursiveFind(this, condition, scope) : RecursiveFind(this, condition, scope)
             RecursiveFind(element, condition, scope:=4, path:="") {
                 for i, child in element.Children {
-                    if child.ValidateCondition(condition)
+                    if child.ValidateCondition(condition) && (--index = 0)
                         return child.DefineProp("Path", {value:path (path?",":"") i})
                     else if scope&4
                         try return RecursiveFind(child, condition, scope ^= 1, path (path?",":"") i)
                 }
-                throw Error("Matching Acc object not found")
-            }  
+                throw Error("Matching Acc object not found", -2)
+            }
+            ReverseRecursiveFind(element, condition, scope:=4, path:="") {
+                children := element.Children, length := children.Length + 1
+                Loop (length - 1) {
+                    child := children[length-A_index]
+                    if child.ValidateCondition(condition) && (--index = 0)
+                        return child.DefineProp("Path", {value:path (path?",":"") A_index})
+                    else if scope&4
+                        try return ReverseRecursiveFind(child, condition, scope ^= 1, path (path?",":"") A_index)
+                }
+                throw Error("Matching Acc object not found", -2)
+            }
         }
         ; Returns an array of elements matching the condition (see description under ValidateCondition)
         ; The returned elements also have the "Path" property with the found elements path
@@ -655,7 +696,7 @@ class Acc {
             matches := []
             if scope&1
                 if this.ValidateCondition(condition)
-                    matches.Push(this.DefineProp("Path", ""))
+                    matches.Push(this.DefineProp("Path", {value:""}))
             if scope>1
                 RecursiveFind(this, condition, (scope|1)^1, &matches)
             return matches
