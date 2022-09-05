@@ -662,6 +662,8 @@ class Acc {
                 if condition.HasOwnProp(i) {
                     if (index := condition.%i%) < 0
                         reverse := True, index := -index
+                    else if index = 0
+                        throw Error("Condition index cannot be 0", -1)
                     condition := condition.Clone(), condition.DeleteProp(i)
                 }
             if scope&1
