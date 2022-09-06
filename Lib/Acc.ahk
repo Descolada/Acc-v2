@@ -996,24 +996,22 @@ class Acc {
 			hwnd := WinExist(hwnd)
         if activatedHwnds.Has(hwnd)
             return
-        activatedHwnds[hwnd] := 1
-        cList := WinGetControls(hwnd)
-        for ctrl in cList {
-            if (ctrl = "Chrome_RenderWidgetHostHWND1") {
-                SendMessage(WM_GETOBJECT := 0x003D, 0, 1, "Chrome_RenderWidgetHostHWND1", hwnd)
-                try {
-                    rendererEl := Acc.ObjectFromWindow(hwnd).FindFirst({Role:15})
-                    rendererEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
-                }
-                startTime := A_TickCount
-                while IsSet(rendererEl) && (A_TickCount-startTime < 500) {
-                    try 
-                        if rendererEl.Value
-                            return
-                    Sleep 40
-                }
-                break
+        activatedHwnds[hwnd] := 1, cHwnd := 0
+        try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", hwnd)
+        if !cHwnd
+            return
+        SendMessage(WM_GETOBJECT := 0x003D, 0, 1,, cHwnd)
+        try {
+            rendererEl := (oWin := Acc.ObjectFromWindow(cHwnd,,False))
+            rendererEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
+        }
+        startTime := A_TickCount
+        while IsSet(rendererEl) && (A_TickCount-startTime < 500) {
+            try {
+                if rendererEl.Value
+                    return
             }
+            Sleep 20
         }
     }
        
@@ -1221,7 +1219,7 @@ class Acc {
             }
             this.TVAcc.Delete()
             temp := this.TVAcc.Add("Searching...")
-            Sleep 40
+            Sleep -1
             this.TVAcc.Opt("-Redraw")
             this.TVAcc.Delete()
             for index, oAcc in this.Stored.TreeView {
@@ -1243,7 +1241,7 @@ class Acc {
         ConstructTreeView() {
             this.TVAcc.Delete()
             this.TVAcc.Add("Constructing Tree, please wait...")
-            Sleep 40
+            Sleep -1
             this.TVAcc.Opt("-Redraw")
             this.TVAcc.Delete()
             this.Stored.TreeView := Map()
