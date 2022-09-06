@@ -536,6 +536,12 @@ class Acc {
         }
 
         IsChild => (this.childId == 0 ? False : True)
+        IsSelected { ; Very slow, better to use Element.Selection
+            get {
+                try oSel := this.Parent.Selection
+                return IsSet(oSel) && this.IsEqual(oSel)
+            }
+        }
         Length => (this.childId == 0 ? this.oAcc.accChildCount : 0)
         Exists {
             get {
