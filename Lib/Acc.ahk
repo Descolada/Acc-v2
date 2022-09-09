@@ -1002,7 +1002,7 @@ class Acc {
             return
         SendMessage(WM_GETOBJECT := 0x003D, 0, 1,, cHwnd)
         try {
-            rendererEl := (oWin := Acc.ObjectFromWindow(cHwnd,,False))
+            rendererEl := Acc.ObjectFromWindow(cHwnd,,False).FindFirst({Role:15})
             rendererEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
         }
         startTime := A_TickCount
