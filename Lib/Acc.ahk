@@ -689,7 +689,7 @@ class Acc {
                 for i, child in element.Children {
                     if child.ValidateCondition(condition) && (--index = 0)
                         return child.DefineProp("Path", {value:path (path?",":"") i})
-                    else if scope&4 && (rf := RecursiveFind(child, condition, scope ^= 1, path (path?",":"") i))
+                    else if scope&4 && (rf := RecursiveFind(child, condition,, path (path?",":"") i))
                         return rf 
                 }
             }
@@ -699,7 +699,7 @@ class Acc {
                     child := children[length-A_index]
                     if child.ValidateCondition(condition) && (--index = 0)
                         return child.DefineProp("Path", {value:path (path?",":"") A_index})
-                    else if scope&4 && (rf := ReverseRecursiveFind(child, condition, scope ^= 1, path (path?",":"") A_index))
+                    else if scope&4 && (rf := ReverseRecursiveFind(child, condition,, path (path?",":"") A_index))
                         return rf 
                 }
             }
@@ -784,20 +784,19 @@ class Acc {
                 return 0
             }
             matchmode := 3, casesensitive := 1, notCond := False
-            oCondClone := oCond.Clone()
             for p in ["matchmode", "mm"]
-                if oCondClone.HasOwnProp(p) {
-                    matchmode := oCondClone.%p%
-                    oCondClone.DeleteProp(p)
+                if oCond.HasOwnProp(p) {
+                    matchmode := oCond.%p%
                 }
             for p in ["casesensitive", "cs"]
-                if oCondClone.HasOwnProp(p) {
-                    casesensitive := oCondClone.%p%
-                    oCondClone.DeleteProp(p)
+                if oCond.HasOwnProp(p) {
+                    casesensitive := oCond.%p%
                 }
-            for prop, cond in oCondClone.OwnProps() {
+            for prop, cond in oCond.OwnProps() {
                 switch Type(cond) { ; and condition
                     case "String", "Integer":
+                        if prop = "matchmode" || prop = "mm" || prop = "casesensitive" || prop = "cs"
+                            continue
                         propValue := ""
                         try propValue := this.%prop%
                         switch matchmode, 0 {
