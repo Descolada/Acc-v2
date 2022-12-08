@@ -150,6 +150,7 @@
             Any other key (but recommended is "or") can be used to use "or" condition inside "and" condition.
             Additionally, when matching for location then partial matching can be used (eg only width and height)
                 and relative mode (client, window, screen) can be specified with "relative" or "r".
+            An empty object {} is used as "unset" or "N/A" value.
 
             {Name:"Something"} => Name must match "Something" (case sensitive)
             {Name:"Something", matchmode:2, casesensitive:False} => Name must contain "Something" anywhere inside the Name, case insensitive
@@ -159,6 +160,7 @@
             {or:[{Name:"Something"},{Name:"Something else"}], or2:[{Role:20},{Role:42}]}
             {Location:{w:200, h:100, r:"client"}} => Location must match width 200 and height 100 relative to client
         Dump(scope:=1)
+            {Name:{}} => Matches for no defined name (outputted by Dump as N/A)
             Outputs relevant information about the element (Name, Value, Location etc)
             Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children); 7=whole subtree (including element)
                 The scope is additive: 3=element itself and direct children.
@@ -788,13 +790,11 @@ class Acc {
             }
             matchmode := 3, casesensitive := 1, notCond := False
             for p in ["matchmode", "mm"]
-                if oCond.HasOwnProp(p) {
+                if oCond.HasOwnProp(p)
                     matchmode := oCond.%p%
-                }
             for p in ["casesensitive", "cs"]
-                if oCond.HasOwnProp(p) {
+                if oCond.HasOwnProp(p)
                     casesensitive := oCond.%p%
-                }
             for prop, cond in oCond.OwnProps() {
                 switch Type(cond) { ; and condition
                     case "String", "Integer":
@@ -820,12 +820,18 @@ class Acc {
                         if (prop="IsEqual") ? !this.IsEqual(cond) : !this.ValidateCondition(cond)
                             return 0
                     default:
-                        if (prop = "Location") {
-                            loc := cond.HasOwnProp("relative") ? this.GetLocation(cond.relative) 
+                        if ObjOwnPropCount(cond) == 0 {
+                            try return this.%prop% && 0
+                            catch
+                                return 1
+                        } else if (prop = "Location") {
+                            try loc := cond.HasOwnProp("relative") ? this.GetLocation(cond.relative) 
                                 : cond.HasOwnProp("r") ? this.GetLocation(cond.r) 
                                 : this.Location
+                            catch
+                                return 0
                             for lprop, lval in cond.OwnProps() {
-                                if ((lprop != "relative") && (lprop != "r") && (loc.%lprop% != lval))
+                                if (!((lprop = "relative") || (lprop = "r")) && (loc.%lprop% != lval))
                                     return 0
                             }
                         } else if ((prop = "not") ? this.ValidateCondition(cond) : !this.ValidateCondition(cond))
@@ -838,11 +844,10 @@ class Acc {
         Dump(scope:=1) {
             out := ""
             if scope&1 {
-                RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", Pos := {x:0,y:0,w:0,h:0}
-                for _, v in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"]
+                RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", Location := {x:"N/A",y:"N/A",w:"N/A",h:"N/A"}
+                for _, v in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "Location"]
                     try %v% := this.%v%
-                try Pos := this.Location
-                out := "RoleText: " RoleText " Role: " Role " [Location: {x:" Pos.x ",y:" Pos.y ",w:" Pos.w ",h:" Pos.h "}]" " [Name: " Name "] [Value: " Value  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "")
+                out := "RoleText: " RoleText " Role: " Role " [Location: {x:" Location.x ",y:" Location.y ",w:" Location.w ",h:" Location.h "}]" " [Name: " Name "] [Value: " Value  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "")
             }
             if scope&4
                 return Trim(RecurseTree(this, out), "`n")
@@ -1202,7 +1207,7 @@ class Acc {
             Acc.ClearHighlights() ; Clear
             oAcc.Highlight(0) ; Indefinite show
             this.LVProps.Delete()
-            Location := {x:0,y:0,w:0,h:0}, RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", ChildId := ""
+            Location := {x:"N/A",y:"N/A",w:"N/A",h:"N/A"}, RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", ChildId := ""
             for _, v in ["RoleText", "Role", "Value", "Name", "Location", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId"] {
                 try %v% := oAcc.%v%
                 this.LVProps.Add(,v, v = "Location" ? ("x: " %v%.x " y: " %v%.y " w: " %v%.w " h: " %v%.h) : %v%)
@@ -1291,4 +1296,3 @@ class Acc {
         }
     }
 }
-
