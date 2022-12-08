@@ -126,9 +126,10 @@
             Since index/i needs to be a key-value pair, then to use it with an "or" condition
             it must be inside an object ("and" condition), for example with key "or":
                 FindFirst({or:[{Name:"Something"}, {Name:"Something else"}], index:2})
-        FindAll(condition, scope:=4)
+        FindAll(condition:=True, scope:=4)
             Returns an array of elements matching the condition (see description under ValidateCondition)
             The returned elements also have the "Path" property with the found elements path
+            By default matches any condition.
         WaitElementExist(conditionOrPath, scope:=4, timeOut:=-1)
             Waits an element exist that matches a condition or a path. 
             Timeout less than 1 waits indefinitely, otherwise is the wait time in milliseconds
@@ -647,27 +648,28 @@ class Acc {
         }
 
         IsEqual(oCompare) {
-            try loc1 := this.Location, loc2 := oCompare.Location
-            catch 
-                return 0
+            loc1 := {x:0,y:0,w:0,h:0}, loc2 := {x:0,y:0,w:0,h:0}
+            try loc1 := this.Location
+            catch { ; loc1 unset
+                loc1 := {x:0,y:0,w:0,h:0}
+                try return oCompare.Location && 0 ; if loc2 is set then code will return
+            }
+            try loc2 := oCompare.Location
             if (loc1.x != loc2.x) || (loc1.y != loc2.y) || (loc1.w != loc2.w) || (loc1.h != loc2.h)
                 return 0
-            for _, v in ((loc1.x = 0) && (loc1.y = 0) && (loc1.w = 0) && (loc1.h = 0)) ? ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"] : ["Role", "Name"] {
+            for _, v in ((loc1.x = 0) && (loc1.y = 0) && (loc1.w = 0) && (loc1.h = 0)) ? ["Role", "Value", "Name", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help"] : ["Role", "Name"] {
                 try v1 := this.%v%
                 catch { ; v1 unset
                     try v2 := oCompare.%v%
-                    catch { ; both unset, continue
+                    catch ; both unset, continue
                         continue
-                    }
                     return 0 ; v1 unset, v2 set 
                 }
                 try v2 := oCompare.%v%
-                catch { ; v1 set, v2 unset
+                catch ; v1 set, v2 unset
                     return 0
-                } else {
-                    if v1 != v2 ; both set
-                        return 0
-                }
+                if v1 != v2 ; both set
+                    return 0
             }
             return 1
         }
@@ -711,7 +713,7 @@ class Acc {
         }
         ; Returns an array of elements matching the condition (see description under ValidateCondition)
         ; The returned elements also have the "Path" property with the found elements path
-        FindAll(condition, scope:=4) {
+        FindAll(condition:=True, scope:=4) {
             matches := []
             if scope&1
                 if this.ValidateCondition(condition)
@@ -781,7 +783,7 @@ class Acc {
         */
         ValidateCondition(oCond) {
             if !IsObject(oCond)
-                throw TypeError("Condition must be an object or array", -1)
+                return !!oCond ; if oCond is not an object, then it is treated as True or False condition
             if Type(oCond) = "Array" { ; or condition
                 for _, c in oCond
                     if this.ValidateCondition(c)
