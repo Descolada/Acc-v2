@@ -13,15 +13,15 @@
         3) Element methods are contained inside element objects
         4) Element properties can be used without the "acc" prefix
         5) ChildIds have been removed (are handled in the backend), but can be accessed through 
-        el.ChildId
+           Element.ChildId
         6) Additional methods have been added for elements, such as FindFirst, FindAll, Click
-        7) Acc constants are included in the Acc object
+        7) Acc constants are included in the main Acc object
         8) AccViewer is built into the library: when ran directly the AccViewer will show, when included
-        in another script then it won't show (but can be accessed by calling Acc.Viewer())
+           in another script then it won't show (but can be opened by calling Acc.Viewer())
 
     Acc constants/properties:
         Constants can be accessed as properties (eg Acc.OBJID.CARET), or the property name can be
-        accessed by getting as an item (eg Acc.OBJID[0xFFFFFFF8])
+        fetched by getting as an item (eg Acc.OBJID[0xFFFFFFF8])
 
         OBJID
         STATE
@@ -36,14 +36,14 @@
     Acc methods:
         ObjectFromPoint(x:=unset, y:=unset, activateChromium := True)
             Gets an Acc element from screen coordinates X and Y (NOT relative to the active window).
-        ObjectFromWindow(hWnd:="", idObject := 0, activateChromium := True)
+        ObjectFromWindow(hWnd:="", idObject := -4, activateChromium := True)
             Gets an Acc element from a WinTitle, by default the Last Found Window. 
             Additionally idObject can be specified from Acc.OBJID constants (eg to get the Caret location).
         ObjectFromChromium(hWnd:="", activateChromium := True)
             Gets an Acc element for the Chromium render control, by default for the Last Found Window.
         GetRootElement()
             Gets the Acc element for the Desktop
-        ActivateChromiumAccessibility(hWnd) 
+        ActivateChromiumAccessibility(hWnd:="") 
             Sends the WM_GETOBJECT message to the Chromium document element and waits for the 
             app to be accessible to Acc. This is called when ObjectFromPoint or ObjectFromWindow 
             activateChromium flag is set to True. A small performance increase may be gotten 
@@ -78,6 +78,8 @@
                                Since index/i needs to be a key-value pair, then to use it with an "or" condition
                                it must be inside an object ("and" condition), for example with key "or":
                                     Element[{or:[{Name:"Something"},{Name:"Something else"}], i:2}]
+                               Path string can also be used with comma-separated numbers or RoleText
+                                    Element["4,window,4"] will select 4th childs first RoleText=window childs 4th child
         Name                => Gets or sets the name. All objects support getting this property.
         Value               => Gets or sets the value. Not all objects have a value.
         Role                => Gets the Role of the specified object in integer form. All objects support this property.
@@ -99,8 +101,8 @@
         Exists              => Checks whether the element is still alive and accessible
         ControlID           => ID (hwnd) of the control associated with the element
         WinID               => ID (hwnd) of the window the element belongs to
-        oAcc                => ComObject of the underlying IAccessible
-        childId             => childId of the underlying IAccessible
+        oAcc                => ComObject of the underlying IAccessible (for internal use)
+        childId             => childId of the underlying IAccessible (for internal use)
     
     IAccessible element methods:
         Select(flags)
@@ -189,7 +191,7 @@
                 Eg Click(200) will sleep 200ms after clicking
             If ClickCount is a number >=10, then Sleep will be called with that number. To click 10+ times and sleep after, specify "ClickCount SleepTime". Ex: Click("left", 200) will sleep 200ms after clicking. 
                 Ex: Click("left", "20 200") will left-click 20 times and then sleep 200ms.
-            If Relative is "Rel" or "Relative" then X and Y coordinates are treated as offsets from the current mouse position. Otherwise it expects offset values for both X and Y (eg "-5 10" would offset X by -5 and Y by +10).
+            Relative can be offset values for the click (eg "-5 10" would offset the click from the center, X by -5 and Y by +10).
             NoActivate will cause the window not to be brought to focus before clicking if the clickable point is not visible on the screen.
         ControlClick(WhichButton:="left", ClickCount:=1, Options:="")
             ControlClicks the element after getting relative coordinates with GetLocation("client"). 
@@ -199,6 +201,24 @@
         HitTest(x, y)
             Retrieves the child element or child object that is displayed at a specific point on the screen.
             This shouldn't be used, since Acc.ObjectFromPoint uses this internally
+    
+
+    Comments about design choices:
+        1)  In this library accessing non-existant properties will cause an error to be thrown. 
+            This means that if AccViewer reports N/A as a value then the property doesn't exist,
+            which is different from the property being "" or 0. Because of this, we have another
+            way of differentiating/filtering elements, which may or may not be useful.
+        2)  Methods that have Hwnd as an argument have the default value of Last Found Window. 
+            This is to be consistent with AHK overall. 
+        3)  Methods that will return a starting point Acc element usually have the activateChromium
+            option set to True. This is because Chromium-based applications are quite common, but 
+            interacting with them via Acc require accessibility to be turned on. It makes sense to 
+            detect those windows automatically and activate by default (if needed).
+        4)  ObjectFromWindow: in AHK it makes sense for idObject to have the default value of -4 (CLIENT)
+            because window hwnds and control hwnds are clearly separate with different functions to
+            get them. If 0 (WINDOW) were the default, then passing in a control hwnd would return 
+            an object for the window, not the control, but usually we would like to get an object
+            for the control.
 */
 
 #DllLoad oleacc
@@ -952,7 +972,8 @@ class Acc {
         }
         /**
          * Outputs relevant information about the element
-         * @param scope The search scope: 1=element itself; 2=direct children; 4=descendants (including children of children). Default is self.
+         * @param scope The search scope: 1=element itself; 2=direct children; 4=descendants (including children of children).
+         *     The scope is additive: 3=element itself and direct children. Default is self.
          */
         Dump(scope:=1) {
             out := ""
@@ -1115,12 +1136,11 @@ class Acc {
     /**
      * Returns an Acc element corresponding to the provided window Hwnd. 
      * @param hWnd The window Hwnd. Default is Last Found Window.
-     * @param idObject An OBJID constant. Default is OBJID.WINDOW (value 0). 
-     *     To get an object from a control Hwnd, use OBJID.CLIENT (value -4)
+     * @param idObject An OBJID constant. Default is OBJID.CLIENT (value -4). 
      * @param activateChromium Whether to turn on accessibility for Chromium-based windows. Default is True.
      * @returns {Acc.IAccessible}
      */
-    static ObjectFromWindow(hWnd:="", idObject := 0, activateChromium:=True) {
+    static ObjectFromWindow(hWnd:="", idObject := -4, activateChromium:=True) {
         if !IsInteger(hWnd)
             hWnd := WinExist(hWnd)
         if !hWnd
