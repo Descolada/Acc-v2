@@ -36,7 +36,7 @@
     Acc methods:
         ObjectFromPoint(x:=unset, y:=unset, activateChromium := True)
             Gets an Acc element from screen coordinates X and Y (NOT relative to the active window).
-        ObjectFromWindow(hWnd:="", idObject := -4, activateChromium := True)
+        ObjectFromWindow(hWnd:="", idObject := 0, activateChromium := True)
             Gets an Acc element from a WinTitle, by default the Last Found Window. 
             Additionally idObject can be specified from Acc.OBJID constants (eg to get the Caret location).
         ObjectFromChromium(hWnd:="", activateChromium := True)
@@ -139,6 +139,11 @@
             Returns an array of elements matching the condition (see description under ValidateCondition)
             The returned elements also have the "Path" property with the found elements path
             By default matches any condition.
+        WaitElement(conditionOrPath, scope:=4, timeOut:=-1)
+            Waits an element to be detectable in the Acc tree. This doesn't mean that the element
+            is visible or interactable, use WaitElementExist for that. 
+            Timeout less than 1 waits indefinitely, otherwise is the wait time in milliseconds
+            A timeout returns 0.
         WaitElementExist(conditionOrPath, scope:=4, timeOut:=-1)
             Waits an element exist that matches a condition or a path. 
             Timeout less than 1 waits indefinitely, otherwise is the wait time in milliseconds
@@ -214,11 +219,10 @@
             option set to True. This is because Chromium-based applications are quite common, but 
             interacting with them via Acc require accessibility to be turned on. It makes sense to 
             detect those windows automatically and activate by default (if needed).
-        4)  ObjectFromWindow: in AHK it makes sense for idObject to have the default value of -4 (CLIENT)
-            because window hwnds and control hwnds are clearly separate with different functions to
-            get them. If 0 (WINDOW) were the default, then passing in a control hwnd would return 
-            an object for the window, not the control, but usually we would like to get an object
-            for the control.
+        4)  ObjectFromWindow: in AHK it may make more sense for idObject to have the default value of 
+            -4 (CLIENT), but using that by default will prevent access from the window title bar,
+            which might be useful to have. Usually though, OBJID.CLIENT will be enough, and when
+            using control Hwnds then it must be used (otherwise the object for the window will be returned).
 */
 
 #DllLoad oleacc
@@ -621,7 +625,7 @@ class Acc {
         }
         ; Returns the child count of this object
         Length => (this.childId == 0 ? this.oAcc.accChildCount : 0)
-        ; Checks whether this object still exists
+        ; Checks whether this object still exists and is visible/accessible
         Exists {
             get {
                 try {
@@ -689,11 +693,15 @@ class Acc {
                 throw TypeError("Child must be an integer", -1)
             n := Integer(n)
             cChildren := this.oAcc.accChildCount
-            if n < 1 || n > cChildren
+            if n > cChildren
                 throw IndexError("Child index " n " is out of bounds", -1)
             varChildren := Buffer(cChildren * (8+2*A_PtrSize))
             try {
                 if DllCall("oleacc\AccessibleChildren", "ptr",ComObjValue(this.oAcc), "int",0, "int",cChildren, "ptr",varChildren, "int*",cChildren) > -1 {
+                    if n < 1
+                        n := cChildren + n + 1
+                    if n < 1 || n > cChildren
+                        throw IndexError("Child index " n " is out of bounds", -1)
                     i := (n-1) * (A_PtrSize * 2 + 8) + 8
                     child := NumGet(varChildren, i, "ptr")
                     oChild := NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.oAcc, child, this.wId)
@@ -848,16 +856,36 @@ class Acc {
             }          
         }
         /**
+         * Waits for an element matching a condition or path to exist in the Acc tree.
+         * Element being in the Acc tree doesn't mean it's necessarily visible or interactable,
+         * use WaitElementExist for that.
+         * @param conditionOrPath Condition object (see ValidateCondition), or Acc path as a string (comma-separated numbers)
+         * @param scope The search scope: 1=element itself; 2=direct children; 4=descendants (including children of children). Default is descendants.
+         * @param timeOut Timeout in milliseconds. Default in indefinite waiting.
+         * @returns {Acc.IAccessible}
+         */
+        WaitElement(conditionOrPath, scope:=4, timeOut:=-1) {
+            waitTime := A_TickCount + timeOut
+            while ((timeOut < 1) ? 1 : (A_tickCount < waitTime)) {
+                try return IsObject(conditionOrPath) ? this.FindFirst(conditionOrPath, scope) : this[conditionOrPath]
+                Sleep 40
+            }
+        }
+        /**
          * Waits for an element matching a condition or path to appear.
          * @param conditionOrPath Condition object (see ValidateCondition), or Acc path as a string (comma-separated numbers)
          * @param scope The search scope: 1=element itself; 2=direct children; 4=descendants (including children of children). Default is descendants.
          * @param timeOut Timeout in milliseconds. Default in indefinite waiting.
          * @returns {Acc.IAccessible}
          */
-        WaitElementExist(conditionOrPath, scope:=4, timeOut:=-1) {
+         WaitElementExist(conditionOrPath, scope:=4, timeOut:=-1) {
             waitTime := A_TickCount + timeOut
             while ((timeOut < 1) ? 1 : (A_tickCount < waitTime)) {
-                try return IsObject(conditionOrPath) ? this.FindFirst(conditionOrPath, scope) : this[conditionOrPath]
+                try {
+                    oFind := IsObject(conditionOrPath) ? this.FindFirst(conditionOrPath, scope) : this[conditionOrPath]
+                    if oFind.Exists
+                        return oFind
+                }
                 Sleep 40
             }
         }
@@ -981,7 +1009,7 @@ class Acc {
                 RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", Location := {x:"N/A",y:"N/A",w:"N/A",h:"N/A"}
                 for _, v in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "Location"]
                     try %v% := this.%v%
-                out := "RoleText: " RoleText " Role: " Role " [Location: {x:" Location.x ",y:" Location.y ",w:" Location.w ",h:" Location.h "}]" " [Name: " Name "] [Value: " Value  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "")
+                out := "RoleText: " RoleText " Role: " Role " [Location: {x:" Location.x ",y:" Location.y ",w:" Location.w ",h:" Location.h "}]" " [Name: " Name "] [Value: " Value  "]" (StateText ? " [StateText: " StateText "]" : "") (State ? " [State: " State "]" : "") (DefaultAction ? " [DefaultAction: " DefaultAction "]" : "") (Description ? " [Description: " Description "]" : "") (KeyboardShortcut ? " [KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? " [Help: " Help "]" : "") (this.childId ? " ChildId: " this.childId : "") "`n"
             }
             if scope&4
                 return Trim(RecurseTree(this, out), "`n")
@@ -1022,10 +1050,12 @@ class Acc {
          * @returns {Acc.IAccessible}
          */
         Highlight(showTime:=unset, color:="Red", d:=2) {
-            if !IsSet(showTime) && Acc.__HighlightGuis.Has(ObjPtr(this)) {
-                for _, r in Acc.__HighlightGuis[ObjPtr(this)]
-                    r.Destroy()
-                Acc.__HighlightGuis.Delete(ObjPtr(this))
+            if !IsSet(showTime) {
+                if Acc.__HighlightGuis.Has(ObjPtr(this)) {
+                    for _, r in Acc.__HighlightGuis[ObjPtr(this)]
+                        r.Destroy()
+                    Acc.__HighlightGuis.Delete(ObjPtr(this))
+                }
                 return this
             }
             Acc.__HighlightGuis[ObjPtr(this)] := []
@@ -1136,11 +1166,12 @@ class Acc {
     /**
      * Returns an Acc element corresponding to the provided window Hwnd. 
      * @param hWnd The window Hwnd. Default is Last Found Window.
-     * @param idObject An OBJID constant. Default is OBJID.CLIENT (value -4). 
+     * @param idObject An OBJID constant. Default is OBJID.WINDOW (value 0). 
+     *     Note that to get objects by control Hwnds, use OBJID.CLIENT (value -4).
      * @param activateChromium Whether to turn on accessibility for Chromium-based windows. Default is True.
      * @returns {Acc.IAccessible}
      */
-    static ObjectFromWindow(hWnd:="", idObject := -4, activateChromium:=True) {
+    static ObjectFromWindow(hWnd:="", idObject := 0, activateChromium:=True) {
         if !IsInteger(hWnd)
             hWnd := WinExist(hWnd)
         if !hWnd
@@ -1194,7 +1225,7 @@ class Acc {
             else
                 for oChild in oAcc {
                     try {
-                        if oChild.RoleText = A_LoopField {
+                        if StrReplace(oChild.RoleText, " ") = A_LoopField {
                             oAcc := oChild
                             break
                         }
@@ -1404,7 +1435,12 @@ class Acc {
         }
         ; Handles right-clicking a listview (copies to clipboard)
         LV_CopyText(GuiCtrlObj, Info, *) {
-            ToolTip("Copied: " (A_Clipboard := GuiCtrlObj.GetText(Info,2)))
+            LVData := Info > GuiCtrlObj.GetCount()
+                ? ListViewGetContent("", GuiCtrlObj)
+                : GuiCtrlObj.GetCount("Selected") > 1
+                ? ListViewGetContent("Selected", GuiCtrlObj)
+                : GuiCtrlObj.GetText(Info,2)
+            ToolTip("Copied: " (A_Clipboard := RegExReplace(LVData, "([ \w]+)\t", "$1: ")))
             SetTimer((*) => ToolTip(), -3000)
         }
         ; Copies the Acc path to clipboard when statusbar is clicked
