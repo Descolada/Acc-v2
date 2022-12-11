@@ -1225,15 +1225,17 @@ class Acc {
         {
             if IsInteger(A_LoopField)
                 oAcc := oAcc.GetNthChild(A_LoopField)
-            else
+            else {
+                RegExMatch(A_LoopField, "(\D+)(\d*)", &m), i := m[2] || 1, c := 0
                 for oChild in oAcc {
                     try {
-                        if StrReplace(oChild.RoleText, " ") = A_LoopField {
+                        if (StrReplace(oChild.RoleText, " ") = m[1]) && (++c = i) {
                             oAcc := oChild
                             break
                         }
                     }
                 }
+            }
         }
         Return oAcc
     }
