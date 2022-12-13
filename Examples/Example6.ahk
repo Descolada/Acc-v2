@@ -8,8 +8,8 @@ CDriveName := DriveGetLabel("C:") " (C:)"
 WinWaitActive(CDriveName)
 
 oExplorer := Acc.ObjectFromWindow()
-oExplorer.FindFirst({Name:"Program Files", matchmode:2}).Select(Acc.SELECTIONFLAG.ADDSELECTION)
-(oWin := oExplorer.FindFirst({Name:"Windows"})).Select(Acc.SELECTIONFLAG.ADDSELECTION)
+oExplorer.FindFirst({Name:"Program Files", RoleText:"list item", matchmode:2}).Select(Acc.SELECTIONFLAG.ADDSELECTION)
+(oWin := oExplorer.FindFirst({Name:"Windows", RoleText:"list item"})).Select(Acc.SELECTIONFLAG.ADDSELECTION)
 
 selectedItems := ""
 for i, selected in oWin.Parent.Selection
