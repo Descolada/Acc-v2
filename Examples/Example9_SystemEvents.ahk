@@ -12,9 +12,10 @@ MsgBox("Press F1 to start capturing all system events.`nPress F2 to stop capturi
     Multiple events can be registered to one callback function.
     If we were interested only in getting oAcc, we could use OnSystemEvent(oAcc, *) instead.
 */
-OnSystemEvent(oAcc, event, time) {
+OnSystemEvent(oAcc, info) {
     try {
-        ToolTip("Element: " oAcc.Name "`nEvent: " Acc.EVENT[event] "`nTime: " time)
+        ToolTip("Element: " oAcc.Name "`nEvent: " Acc.EVENT[info.Event] "`nTime: " info.EventTime
+            . "`nSender window: " WinGetTitle(info.WinID))
         SetTimer(ToolTip, 2000)
     }
 }

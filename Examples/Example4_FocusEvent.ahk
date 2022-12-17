@@ -9,9 +9,10 @@ Persistent()
 h := Acc.RegisterWinEvent(Acc.EVENT.OBJECT_FOCUS, OnFocus)
 h2 := Acc.RegisterWinEvent(Acc.EVENT.SYSTEM_MOVESIZESTART, OnMoveSizeStart)
 
-OnFocus(oAcc, event, time) {
-    try ToolTip("Element: " oAcc.Name "`nEvent: " Acc.EVENT[event] "`nTime: " time)
+OnFocus(oAcc, info) {
+    try ToolTip("Element: " oAcc.Name "`nEvent: " Acc.EVENT[info.Event] "`nTime: " info.EventTime 
+        . "`nSender WinID: " info.WinID "`nSender ControlID: " info.ControlID)
 }
-OnMoveSizeStart(oAcc, event, *) {
-    try ToolTip("Element: " oAcc.Name "`nEvent: " Acc.EVENT[event])
+OnMoveSizeStart(oAcc, info) {
+    try ToolTip("Element: " oAcc.Name "`nEvent: " Acc.EVENT[info.Event])
 }
