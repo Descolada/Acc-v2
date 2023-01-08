@@ -11,7 +11,7 @@ if oEditor.RoleText != "editable text" {
     oEditor := oAcc.FindFirst({RoleText:"editable text"})
     Win11 := True
 }
-oEditor.Highlight(2000)
+oEditor.Highlight()
 oEditor.Value := "Example text" ; Set the value
 
 oAcc.FindFirst({Name:"File"}).DoDefaultAction()
