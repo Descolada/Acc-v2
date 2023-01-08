@@ -118,7 +118,7 @@
         Exists              => Checks whether the element is still alive and accessible
         ControlID           => ID (hwnd) of the control associated with the element
         WinID               => ID (hwnd) of the window the element belongs to
-        oAcc                => ComObject of the underlying IAccessible (for internal use)
+        accessible          => ComObject of the underlying IAccessible (for internal use)
         childId             => childId of the underlying IAccessible (for internal use)
     
     IAccessible element methods:
@@ -473,18 +473,27 @@ class Acc {
         /**
          * Internal method. Creates an Acc element from a raw IAccessible COM object and/or childId,
          * and additionally stores the hWnd of the window the object belongs to.
-         * @param oAcc IAccessible COM object
+         * @param accessible IAccessible COM object
          * @param childId IAccessible childId
          * @param wId hWnd of the parent window
          */
-        __New(oAcc, childId:=0, wId:=0) {
-            if ComObjType(oAcc, "Name") != "IAccessible"
+        __New(accessible, childId:=0, wId:=0) {
+            if ComObjType(accessible, "Name") != "IAccessible"
                 throw Error("Could not access an IAccessible Object")
-            this.DefineProp("oAcc", {value:oAcc})
+            this.DefineProp("ptr", {value:ComObjValue(accessible)})
+            this.DefineProp("accessible", {value:accessible})
             this.DefineProp("childId", {value:childId})
             if wId=0
                 try wId := this.WinID
             this.DefineProp("wId", {value:wId})
+            this.DefineProp("ObjPtr", {value:ObjPtr(this)})
+        }
+        __Delete() {
+            if Acc.__HighlightGuis.Has(this.ObjPtr) {
+                for _, r in Acc.__HighlightGuis[this.ObjPtr]
+                    r.Destroy()
+                Acc.__HighlightGuis[this.ObjPtr] := []
+            }
         }
         /**
          * Internal method. Is a wrapper to access acc properties or methods that take only the 
@@ -493,13 +502,13 @@ class Acc {
          */
         __Get(Name, Params) {
             if !(SubStr(Name,3)="acc") {
-                try return this.oAcc.acc%Name%[this.childId]
-                try return this.oAcc.acc%Name%(this.childId) ; try method with self
-                try return this.oAcc.acc%Name% ; try property
+                try return this.accessible.acc%Name%[this.childId]
+                try return this.accessible.acc%Name%(this.childId) ; try method with self
+                try return this.accessible.acc%Name% ; try property
             }
-            try return this.oAcc.%Name%[this.childId]
-            try return this.oAcc.%Name%(this.childId)
-            return this.oAcc.%Name%
+            try return this.accessible.%Name%[this.childId]
+            try return this.accessible.%Name%(this.childId)
+            return this.accessible.%Name%
         }
         /**
          * Enables array-like use of Acc elements to access child elements. 
@@ -552,16 +561,16 @@ class Acc {
          */
         __Set(Name, Params, Value) {
             if !(SubStr(Name,3)="acc")
-                try return this.oAcc.acc%Name%[Params*] := Value
-            return this.oAcc.%Name%[Params*] := Value
+                try return this.accessible.acc%Name%[Params*] := Value
+            return this.accessible.%Name%[Params*] := Value
         }
         /**
          * Internal method. Enables setting IAccessible acc properties.
          */
         __Call(Name, Params) {
             if !(SubStr(Name,3)="acc")
-                try return this.oAcc.acc%Name%(Params.Length?Params[1]:0)
-            return this.oAcc.%Name%(Params*)
+                try return this.accessible.acc%Name%(Params.Length?Params[1]:0)
+            return this.accessible.%Name%(Params*)
         }
 
         ; Wrappers for native IAccessible methods and properties.
@@ -571,17 +580,17 @@ class Acc {
          * Objects that support selection or receive the keyboard focus should support this method.
          * @param flags One of the SELECTIONFLAG constants
          */
-        Select(flags) => (this.oAcc.accSelect(flags,this.childId)) 
+        Select(flags) => (this.accessible.accSelect(flags,this.childId)) 
         /**
          * Performs the specified object's default action. Not all objects have a default action.
          */
-        DoDefaultAction() => (this.oAcc.accDoDefaultAction(this.childId))
+        DoDefaultAction() => (this.accessible.accDoDefaultAction(this.childId))
         /**
          * Retrieves the child element or child object that is displayed at a specific point on the screen.
          * This method usually shouldn't be called. To get the accessible object that is displayed at a point, 
          * use the ObjectFromPoint method, which calls this method internally on native IAccessible side.
          */
-        HitTest(x, y) => (this.IAccessibleFromVariant(this.oAcc.accHitTest(x, y)))
+        HitTest(x, y) => (this.IAccessibleFromVariant(this.accessible.accHitTest(x, y)))
         /**
          * Traverses to another UI element within a container and retrieves the object. 
          * This method is deprecated and should not be used.
@@ -589,41 +598,41 @@ class Acc {
          * @returns {Acc.IAccessible}
          */
         Navigate(navDir) {
-            varEndUpAt := this.oAcc.accNavigate(navDir,this.childId)
+            varEndUpAt := this.accessible.accNavigate(navDir,this.childId)
             if Type(varEndUpAt) = "ComObject"
                 return Acc.IAccessible(Acc.Query(varEndUpAt))
             else if IsInteger(varEndUpAt)
-                return Acc.IAccessible(this.oAcc, varEndUpAt, this.wId)
+                return Acc.IAccessible(this.accessible, varEndUpAt, this.wId)
             else
                 return
         }
         Name {
-            get => (this.oAcc.accName[this.childId])
-            set => (this.oAcc.accName[this.childId] := Value)
+            get => (this.accessible.accName[this.childId])
+            set => (this.accessible.accName[this.childId] := Value)
         } 
         Value {
-            get => (this.oAcc.accValue[this.childId])
-            set => (this.oAcc.accValue[this.childId] := Value)
+            get => (this.accessible.accValue[this.childId])
+            set => (this.accessible.accValue[this.childId] := Value)
         } 
-        Role => (this.oAcc.accRole[this.childId]) ; Returns an integer
+        Role => (this.accessible.accRole[this.childId]) ; Returns an integer
         RoleText => (Acc.GetRoleText(this.Role)) ; Returns a string
-        Help => (this.oAcc.accHelp[this.childId])
-        KeyboardShortcut => (this.oAcc.accKeyboardShortcut[this.childId])
-        State => (this.oAcc.accState[this.childId]) ; Returns an integer
-        StateText => (Acc.GetStateText(this.oAcc.accState[this.childId])) ; Returns a string
-        Description => (this.oAcc.accDescription[this.childId]) ; Returns a string
-        DefaultAction => (this.oAcc.accDefaultAction[this.childId]) ; Returns a string
+        Help => (this.accessible.accHelp[this.childId])
+        KeyboardShortcut => (this.accessible.accKeyboardShortcut[this.childId])
+        State => (this.accessible.accState[this.childId]) ; Returns an integer
+        StateText => (Acc.GetStateText(this.accessible.accState[this.childId])) ; Returns a string
+        Description => (this.accessible.accDescription[this.childId]) ; Returns a string
+        DefaultAction => (this.accessible.accDefaultAction[this.childId]) ; Returns a string
         ; Retrieves the Acc element child that has the keyboard focus.
-        Focus => (this.IAccessibleFromVariant(this.oAcc.accFocus())) 
+        Focus => (this.IAccessibleFromVariant(this.accessible.accFocus())) 
         ; Returns an array of Acc elements that are the selected children of this object.
-        Selection => (this.IAccessibleFromVariant(this.oAcc.accSelection()))
+        Selection => (this.IAccessibleFromVariant(this.accessible.accSelection()))
         ; Returns the parent of this object as an Acc element
-        Parent => (this.IsChild ? Acc.IAccessible(this.oAcc,,this.wId) : Acc.IAccessible(Acc.Query(this.oAcc.accParent)))
+        Parent => (this.IsChild ? Acc.IAccessible(this.accessible,,this.wId) : Acc.IAccessible(Acc.Query(this.accessible.accParent)))
 
         ; Returns the Hwnd for the control corresponding to this object
         ControlID {
             get {
-                if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", ComObjValue(this.oAcc), "uint*", &hWnd:=0) = 0
+                if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", this, "uint*", &hWnd:=0) = 0
                     return hWnd
                 throw Error("WindowFromAccessibleObject failed", -1)
             }
@@ -631,7 +640,7 @@ class Acc {
         ; Returns the Hwnd for the window corresponding to this object
         WinID {
             get {
-                if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", ComObjValue(this.oAcc), "uint*", &hWnd:=0) = 0
+                if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", this, "uint*", &hWnd:=0) = 0
                     return DllCall("GetAncestor", "UInt", hWnd, "UInt", GA_ROOT := 2)
                 throw Error("WindowFromAccessibleObject failed", -1)
             }
@@ -646,7 +655,7 @@ class Acc {
             }
         }
         ; Returns the child count of this object
-        Length => (this.childId == 0 ? this.oAcc.accChildCount : 0)
+        Length => (this.childId == 0 ? this.accessible.accChildCount : 0)
         ; Checks whether this object still exists and is visible/accessible
         Exists {
             get {
@@ -665,22 +674,22 @@ class Acc {
         Location {
             get {
                 x:=Buffer(4, 0), y:=Buffer(4, 0), w:=Buffer(4, 0), h:=Buffer(4, 0)
-                this.oAcc.accLocation(ComValue(0x4003, x.ptr, 1), ComValue(0x4003, y.ptr, 1), ComValue(0x4003, w.ptr, 1), ComValue(0x4003, h.ptr, 1), this.childId)
+                this.accessible.accLocation(ComValue(0x4003, x.ptr, 1), ComValue(0x4003, y.ptr, 1), ComValue(0x4003, w.ptr, 1), ComValue(0x4003, h.ptr, 1), this.childId)
                 Return {x:NumGet(x,0,"int"), y:NumGet(y,0,"int"), w:NumGet(w,0,"int"), h:NumGet(h,0,"int")}
             }
         }
         ; Returns all children of this object as an array of Acc elements
         Children {
             get {
-                if this.IsChild || !(cChildren := this.oAcc.accChildCount)
+                if this.IsChild || !(cChildren := this.accessible.accChildCount)
                     return []
                 Children := Array(), varChildren := Buffer(cChildren * (8+2*A_PtrSize))
                 try {
-                    if DllCall("oleacc\AccessibleChildren", "ptr", ComObjValue(this.oAcc), "int",0, "int", cChildren, "ptr", varChildren, "int*", cChildren) > -1 {
+                    if DllCall("oleacc\AccessibleChildren", "ptr", this, "int",0, "int", cChildren, "ptr", varChildren, "int*", cChildren) > -1 {
                         Loop cChildren {
                             i := (A_Index-1) * (A_PtrSize * 2 + 8) + 8
                             child := NumGet(varChildren, i, "ptr")
-                            Children.Push(NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.oAcc, child, this.wId))
+                            Children.Push(NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.accessible, child, this.wId))
                             NumGet(varChildren, i-8, "ptr") = 9 ? ObjRelease(child) : ""
                         }
                         Return Children
@@ -705,7 +714,7 @@ class Acc {
                         return oArr
                 }
             } else if IsInteger(var)
-                return Acc.IAccessible(this.oAcc,var,this.wId)
+                return Acc.IAccessible(this.accessible,var,this.wId)
             else
                 return var
         }
@@ -714,19 +723,19 @@ class Acc {
             if !IsNumber(n)
                 throw TypeError("Child must be an integer", -1)
             n := Integer(n)
-            cChildren := this.oAcc.accChildCount
+            cChildren := this.accessible.accChildCount
             if n > cChildren
                 throw IndexError("Child index " n " is out of bounds", -1)
             varChildren := Buffer(cChildren * (8+2*A_PtrSize))
             try {
-                if DllCall("oleacc\AccessibleChildren", "ptr",ComObjValue(this.oAcc), "int",0, "int",cChildren, "ptr",varChildren, "int*",cChildren) > -1 {
+                if DllCall("oleacc\AccessibleChildren", "ptr", this, "int",0, "int",cChildren, "ptr",varChildren, "int*",cChildren) > -1 {
                     if n < 1
                         n := cChildren + n + 1
                     if n < 1 || n > cChildren
                         throw IndexError("Child index " n " is out of bounds", -1)
                     i := (n-1) * (A_PtrSize * 2 + 8) + 8
                     child := NumGet(varChildren, i, "ptr")
-                    oChild := NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.oAcc, child, this.wId)
+                    oChild := NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.accessible, child, this.wId)
                     NumGet(varChildren, i-8, "ptr") = 9 ? ObjRelease(child) : ""
                     Return oChild
                 }
@@ -1084,25 +1093,26 @@ class Acc {
          *     0 - Indefinite highlighting
          *     Positive integer (eg 2000) - will highlight and pause for the specified amount of time in ms
          *     Negative integer - will highlight for the specified amount of time in ms, but script execution will continue
+         *     "clear" - removes the highlight
          * @param color The color of the highlighting. Default is red.
          * @param d The border thickness of the highlighting in pixels. Default is 2.
          * @returns {Acc.IAccessible}
          */
         Highlight(showTime:=unset, color:="Red", d:=2) {
-            if !IsSet(showTime) {
-                if Acc.__HighlightGuis.Has(ObjPtr(this)) {
-                    for _, r in Acc.__HighlightGuis[ObjPtr(this)]
-                        r.Destroy()
-                    Acc.__HighlightGuis.Delete(ObjPtr(this))
-                }
+            if !Acc.__HighlightGuis.Has(this.ObjPtr)
+                Acc.__HighlightGuis[this.ObjPtr] := []
+            if (!IsSet(showTime) && Acc.__HighlightGuis[this.ObjPtr].Length) || (IsSet(showTime) && showTime = "clear") {
+                for _, r in Acc.__HighlightGuis[this.ObjPtr]
+                    r.Destroy()
+                Acc.__HighlightGuis[this.ObjPtr] := []
                 return this
-            }
-            Acc.__HighlightGuis[ObjPtr(this)] := []
+            } else if !IsSet(showTime)
+                showTime := 2000
             try loc := this.Location
             if !IsSet(loc) || !IsObject(loc)
                 return this
             Loop 4 {
-                Acc.__HighlightGuis[ObjPtr(this)].Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
+                Acc.__HighlightGuis[this.ObjPtr].Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
             }
             Loop 4
             {
@@ -1111,16 +1121,17 @@ class Acc {
                 , y1:=(i=3 ? loc.y+loc.h : loc.y-d)
                 , w1:=(i=1 or i=3 ? loc.w+2*d : d)
                 , h1:=(i=2 or i=4 ? loc.h+2*d : d)
-                Acc.__HighlightGuis[ObjPtr(this)][i].BackColor := color
-                Acc.__HighlightGuis[ObjPtr(this)][i].Show("NA x" . x1 . " y" . y1 . " w" . w1 . " h" . h1)
+                Acc.__HighlightGuis[this.ObjPtr][i].BackColor := color
+                Acc.__HighlightGuis[this.ObjPtr][i].Show("NA x" . x1 . " y" . y1 . " w" . w1 . " h" . h1)
             }
             if showTime > 0 {
                 Sleep(showTime)
                 this.Highlight()
             } else if showTime < 0
-                SetTimer(ObjBindMethod(this, "Highlight"), -Abs(showTime))
+                SetTimer(ObjBindMethod(this, "Highlight", "clear"), -Abs(showTime))
             return this
         }
+        ClearHighlight() => this.Highlight("clear")
 
         /**
          * Clicks the center of the element.
