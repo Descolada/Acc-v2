@@ -14,7 +14,7 @@ MsgBox("Press F1 to start capturing all system events.`nPress F2 to stop capturi
 */
 OnSystemEvent(oAcc, info) {
     try {
-        ToolTip("Element: " oAcc.Name "`nEvent: " Acc.EVENT[info.Event] "`nTime: " info.EventTime
+        ToolTip("Element: " oAcc.Name "`nEvent: " Acc.Event[info.Event] "`nTime: " info.EventTime
             . "`nSender window: " WinGetTitle(info.WinID))
         SetTimer(ToolTip, 2000)
     }
@@ -33,7 +33,7 @@ F1::
 {
     global handler
     if !IsSet(handler)
-        handler := Acc.RegisterWinEvent(Acc.EVENT.SYSTEM_SOUND, Acc.Event.SYSTEM_MINIMIZEEND, OnSystemEvent)
+        handler := Acc.RegisterWinEvent(Acc.Event.System_Sound, Acc.Event.System_MinimizeEnd, OnSystemEvent)
 }
 ; Deregistering the events will happen when the event handler object is destroyed, for example by unsetting it
 F2::global handler := unset

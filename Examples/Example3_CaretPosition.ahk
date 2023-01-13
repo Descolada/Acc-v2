@@ -3,7 +3,7 @@
 
 oCaretPos := {x:0,y:0}
 Loop {
-    try oCaretPos := Acc.ObjectFromWindow("A", Acc.OBJID.CARET).Location
+    try oCaretPos := Acc.ElementFromHandle("A", Acc.ObjId.Caret).Location
     if oCaretPos.x=0 && oCaretPos.y=0
         CaretGetPos(&x, &y), ToolTip("x: " x " y: " y)
     else

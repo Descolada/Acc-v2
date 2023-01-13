@@ -5,7 +5,7 @@
 ; Hover over a browser with the cursor to test it out.
 
 Loop {
-    oAcc := Acc.ObjectFromPoint(), oEl := ""
+    oAcc := Acc.ElementFromPoint(), oEl := ""
     try {
         oEl := oAcc.Normalize({RoleText:"document", not:{Value:""}})
         RoleText := "`"`"", Name := " `"`""
