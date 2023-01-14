@@ -204,11 +204,11 @@ More thorough explanations for the constants are available [in Microsoft documen
         {or:[{Name:"Something"},{Name:"Something else"}], or2:[{Role:20},{Role:42}]}
         {Location:{w:200, h:100, r:"client"}} => Location must match width 200 and height 100 relative to client
 
-    Dump(scope:=1)
+    Dump(scope:=1, delimiter:=" ", depth:=-1)
         Outputs relevant information about the element (Name, Value, Location etc)
         Scope is the search scope: 1=element itself; 2=direct children; 4=descendants (including children of children); 7=whole subtree (including element)
             The scope is additive: 3=element itself and direct children.
-    DumpAll()
+    DumpAll(delimiter:=" ", depth:=-1)
         Outputs relevant information about the element and all descendants of the element. This is equivalent to Dump(7)
     Highlight(showTime:=unset, color:="Red", d:=2)
         Highlights the element for a chosen period of time
