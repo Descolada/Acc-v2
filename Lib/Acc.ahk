@@ -869,10 +869,10 @@ class Acc {
                 else if index = 0
                     throw Error("Condition index cannot be 0", -1)
             }
-            ++depth, scope := IsInteger(scope) ? scope : Acc.TreeScope.%scope%, order := IsInteger(order) ? order : Acc.TreeTraversalOptions.%order%
+            scope := IsInteger(scope) ? scope : Acc.TreeScope.%scope%, order := IsInteger(order) ? order : Acc.TreeTraversalOptions.%order%
 
             if order&2
-                return order&1 ? PostOrderLastToFirstRecursiveFind(this, condition, scope,, depth) : PostOrderFirstToLastRecursiveFind(this, condition, scope,, depth)
+                return order&1 ? PostOrderLastToFirstRecursiveFind(this, condition, scope,, ++depth) : PostOrderFirstToLastRecursiveFind(this, condition, scope,, ++depth)
             if scope&1
                 if this.ValidateCondition(condition) && (--index = 0)
                     return this.DefineProp("Path", {value:""})
