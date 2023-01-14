@@ -33,7 +33,7 @@ F1::
 {
     global handler
     if !IsSet(handler)
-        handler := Acc.RegisterWinEvent(Acc.Event.System_Sound, Acc.Event.System_MinimizeEnd, OnSystemEvent)
+        handler := Acc.RegisterWinEvent(OnSystemEvent, Acc.Event.System_Sound, Acc.Event.System_MinimizeEnd)
 }
 ; Deregistering the events will happen when the event handler object is destroyed, for example by unsetting it
 F2::global handler := unset
