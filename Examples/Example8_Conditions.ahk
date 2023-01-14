@@ -17,17 +17,17 @@ MsgBox result
 
 ; Negate with "not"
 result := "All elements matching Name `"Minimize`":`n`n"
-for i, v in oAcc.FindElements([{Name:"Minimize"}])
+for i, v in oAcc.FindElements({Name:"Minimize"})
     result .= i ": " v.Dump() "`n"
 result .= "`nAll elements matching Name `"Minimize`" but not Role `"43`":`n`n"
-for i, v in oAcc.FindElements([{Name:"Minimize", not:{Role:43}}])
+for i, v in oAcc.FindElements({Name:"Minimize", not:{Role:43}})
     result .= i ": " v.Dump() "`n"
 MsgBox result
 
 ; Specify case-sensitivity with "casesensitive" or "cs", and matchmode with "matchmode" or "mm".
 ; Case-sensitivity is ignored with numeric values.
 result := "All elements matching Name `"minim`" (case insensitive, anywhere in string):`n`n"
-for i, v in oAcc.FindElements([{Name:"minim", cs:false, mm:2}]) ; mm:2 is equal to mm:"SubString"
+for i, v in oAcc.FindElements({Name:"minim", cs:false, mm:2}) ; mm:2 is equal to mm:"SubString"
     result .= i ": " v.Dump() "`n"
 MsgBox result
 
