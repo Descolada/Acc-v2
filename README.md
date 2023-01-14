@@ -51,11 +51,26 @@ Some examples of how Acc.ahk can be used are included in the Examples folder.
         if that flag is set to False when it is not needed.
     RegisterWinEvent(event, callback, PID:=0) 
     RegisterWinEvent(eventMin, eventMax, callback, PID:=0)
-        Registers an event (a constant from Acc.EVENT) to a callback function and returns a new object containing the WinEventHook
+        Registers an event or event range from Acc.Event to a callback function and returns
+            a new object containing the WinEventHook
+        EventMax is an optional variable: if only eventMin and callback are provided, then
+            only that single event is registered. If all three arguments are provided, then
+            an event range from eventMin to eventMax are registered to the callback function.
+        The callback function needs to have two arguments: 
+            CallbackFunction(oAcc, EventInfo)
 
-        The callback function needs to have three arguments: 
-            CallbackFunction(oAcc, Event, EventTime)
-        Unhooking of the event handler will happen once the WinEventHook object is destroyed
+            When the callback function is called:
+            oAcc will be the Acc element that called the event
+            EventInfo will be an object containing the following properties: 
+                Event - an Acc.Event constant
+                EventTime - when the event was triggered in system time
+                WinID - handle of the window that sent the event 
+                ControlID - handle of the control that sent the event, which depending on the
+                    window will be the window itself or a control
+                ObjId - the object Id (Acc.ObjId) the event was called with
+        PID is the Process ID of the process/window the events will be registered from. By default
+            events from all windows are registered.
+        Unhooking of the event handler will happen once the returned object is destroyed
         (either when overwritten by a constant, or when the script closes).
 
     Legacy methods:
