@@ -265,13 +265,23 @@ if (!A_IsCompiled and A_LineFile=A_ScriptFullPath)
     Acc.Viewer()
 
 class Acc {
-    static PropertyFromValue(obj, value) {
-        for k, v in obj.OwnProps()
-            if value == v
-                return k
-        throw UnsetItemError("Property item `"" value "`" not found!", -1)
+    class Enumeration {
+        ; This is enables getting property names from values using the array style
+        __Item[param] {
+            get {
+                local k, v
+                if !this.HasOwnProp("__CachedValues") {
+                    this.__CachedValues := Map()
+                    for k, v in this.OwnProps()
+                        this.__CachedValues[v] := k
+                }
+                if this.__CachedValues.Has(param)
+                    return this.__CachedValues[param]
+                throw UnsetItemError("Property item `"" param "`" not found!", -2)
+            }
+        }
     }
-    static PropertyValueGetter := {get: (obj, value) => Acc.PropertyFromValue(obj, value)}
+
     static RegisteredWinEvents := Map()
 
     ; MatchMode constants used in condition objects
@@ -279,7 +289,8 @@ class Acc {
         StartsWith:1,
         Substring:2,
         Exact:3,
-        RegEx:"Regex"
+        RegEx:"Regex",
+        base:this.Enumeration.Prototype
     }
 
     ; Used wherever the scope variable is needed (eg Dump, FindElement, FindElements)
@@ -288,14 +299,16 @@ class Acc {
         Children:2,
         Family:3,
         Descendants:4,
-        Subtree:7
+        Subtree:7,
+        base:this.Enumeration.Prototype
     }
 
     Static TreeTraversalOptions := {
         Default:0,
         PostOrder:1,
         LastToFirst:2,
-        PostOrderLastToFirst:3
+        PostOrderLastToFirst:3,
+        base:this.Enumeration.Prototype
     }
 
     ;Https://Msdn.Microsoft.Com/En-Us/Library/Windows/Desktop/Dd373606(V=Vs.85).Aspx
@@ -313,8 +326,9 @@ class Acc {
         Alert:0xfffffff6, 
         Sound:0xfffffff5, 
         QueryClassNameIdx:0xfffffff4, 
-        NativeOM:0xfffffff0
-    }.Defineprop("__Item", This.PropertyValueGetter)
+        NativeOM:0xfffffff0,
+        base:this.Enumeration.Prototype
+    }
 
     ;Https://Msdn.Microsoft.Com/En-Us/Library/Windows/Desktop/Dd373609(V=Vs.85).Aspx
     Static State := {
@@ -350,8 +364,9 @@ class Acc {
         Alert_Medium:0x8000000, 
         Alert_High:0x10000000, 
         Protected:0x20000000, 
-        Valid:0x7fffffff
-    }.Defineprop("__Item", This.PropertyValueGetter)
+        Valid:0x7fffffff,
+        base:this.Enumeration.Prototype
+    }
 
     ;Https://Msdn.Microsoft.Com/En-Us/Library/Windows/Desktop/Dd373608(V=Vs.85).Aspx
     Static Role := {
@@ -418,8 +433,9 @@ class Acc {
         Clock:0x3d, 
         SplitButton:0x3e, 
         IPAddress:0x3f, 
-        OutlineButton:0x40
-    }.Defineprop("__Item", This.PropertyValueGetter)
+        OutlineButton:0x40,
+        base:this.Enumeration.Prototype
+    }
    ;Https://, Msdn.Microsoft.Com/En-Us/Library/Windows/Desktop/Dd373600(V=Vs.85).Aspx
     Static NavDir := {
         Min:0x0, 
@@ -431,8 +447,9 @@ class Acc {
         Previous:0x6, 
         FirstChild:0x7, 
         LastChild:0x8, 
-        Max:0x9
-    }.Defineprop("__Item", This.PropertyValueGetter)
+        Max:0x9,
+        base:this.Enumeration.Prototype
+    }
 
     ;Https://Msdn.Microsoft.Com/En-Us/Library/Windows/Desktop/Dd373634(V=Vs.85).Aspx
     Static SelectionFlag := {
@@ -442,8 +459,9 @@ class Acc {
         ExtendSelection:0x4, 
         AddSelection:0x8, 
         RemoveSelection:0x10, 
-        Valid:0x1f
-    }.Defineprop("__Item", This.PropertyValueGetter)
+        Valid:0x1f,
+        base:this.Enumeration.Prototype
+    }
 
     ;Msaa Events List:
     ;    Https://Msdn.Microsoft.Com/En-Us/Library/Windows/Desktop/Dd318066(V=Vs.85).Aspx
@@ -523,16 +541,18 @@ class Acc {
         Object_IME_Hide:0x8028,
         Object_IME_Change:0x8029,
         Object_TextEdit_ConversionTargetChanged:0x8030,
-        Object_End:0x80FF
-    }.Defineprop("__Item", This.PropertyValueGetter)
+        Object_End:0x80FF,
+        base:this.Enumeration.Prototype
+    }
     
     Static WinEvent := {
         OutOfContext:0, 
         SkipOwnThread:1, 
         SkipOwnProcess:2, 
-        InContext:3
-    }.Defineprop("__Item", This.PropertyValueGetter)
-    
+        InContext:3,
+        base:this.Enumeration.Prototype
+    }
+
     static __HighlightGuis := Map()
 
     class IAccessible {
@@ -549,9 +569,8 @@ class Acc {
             this.DefineProp("ptr", {value:ComObjValue(accessible)})
             this.DefineProp("accessible", {value:accessible})
             this.DefineProp("childId", {value:childId})
-            if wId=0
-                try wId := this.WinID
-            this.DefineProp("wId", {value:wId})
+            if wId
+                this.DefineProp("WinID", {value:wId})
             this.DefineProp("ObjPtr", {value:ObjPtr(this)})
         }
         __Delete() {
@@ -669,7 +688,7 @@ class Acc {
             if Type(varEndUpAt) = "ComObject"
                 return Acc.IAccessible(Acc.Query(varEndUpAt))
             else if IsInteger(varEndUpAt)
-                return Acc.IAccessible(this.accessible, varEndUpAt, this.wId)
+                return Acc.IAccessible(this.accessible, varEndUpAt)
             else
                 return
         }
@@ -694,13 +713,13 @@ class Acc {
         ; Returns an array of Acc elements that are the selected children of this object.
         Selection => (this.IAccessibleFromVariant(this.accessible.accSelection()))
         ; Returns the parent of this object as an Acc element
-        Parent => (this.IsChild ? Acc.IAccessible(this.accessible,,this.wId) : Acc.IAccessible(Acc.Query(this.accessible.accParent)))
+        Parent => (this.IsChild ? Acc.IAccessible(this.accessible,,this.WinID) : Acc.IAccessible(Acc.Query(this.accessible.accParent)))
 
         ; Returns the Hwnd for the control corresponding to this object
         ControlID {
             get {
                 if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", this, "uint*", &hWnd:=0) = 0
-                    return hWnd
+                    return (this.DefineProp("ControlID", {value:hWnd}), hWnd)
                 throw Error("WindowFromAccessibleObject failed", -1)
             }
         }
@@ -708,12 +727,12 @@ class Acc {
         WinID {
             get {
                 if DllCall("oleacc\WindowFromAccessibleObject", "Ptr", this, "uint*", &hWnd:=0) = 0
-                    return DllCall("GetAncestor", "UInt", hWnd, "UInt", GA_ROOT := 2)
+                    return (hWnd := DllCall("GetAncestor", "Ptr", hWnd, "UInt", GA_ROOT := 2), this.DefineProp("WinID", {value:hWnd}), hWnd)
                 throw Error("WindowFromAccessibleObject failed", -1)
             }
         }
         ; Checks whether internally this corresponds to a native IAccessible object or a childId
-        IsChild => (this.childId == 0 ? False : True)
+        IsChild => (this.DefineProp("IsChild", {value:(this.childId == 0 ? False : True)}), this.IsChild)
         ; Checks whether this object is selected. This is very slow, a better alternative is Element.Selection
         IsSelected { 
             get {
@@ -756,7 +775,7 @@ class Acc {
                         Loop cChildren {
                             i := (A_Index-1) * (A_PtrSize * 2 + 8) + 8
                             child := NumGet(varChildren, i, "ptr")
-                            Children.Push(NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.accessible, child, this.wId))
+                            Children.Push(NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.WinID) : Acc.IAccessible(this.accessible, child, this.WinID))
                             NumGet(varChildren, i-8, "ptr") = 9 ? ObjRelease(child) : ""
                         }
                         Return Children
@@ -771,7 +790,7 @@ class Acc {
          */
         IAccessibleFromVariant(var) {
             if Type(var) = "ComObject"
-                return Acc.IAccessible(Acc.Query(var),,this.wId)
+                return Acc.IAccessible(Acc.Query(var),,this.WinID)
             else if Type(var) = "Enumerator" {
                 oArr := []
                 Loop {
@@ -781,7 +800,7 @@ class Acc {
                         return oArr
                 }
             } else if IsInteger(var)
-                return Acc.IAccessible(this.accessible,var,this.wId)
+                return Acc.IAccessible(this.accessible,var,this.WinID)
             else
                 return var
         }
@@ -802,7 +821,7 @@ class Acc {
                         throw IndexError("Child index " n " is out of bounds", -1)
                     i := (n-1) * (A_PtrSize * 2 + 8) + 8
                     child := NumGet(varChildren, i, "ptr")
-                    oChild := NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.wId) : Acc.IAccessible(this.accessible, child, this.wId)
+                    oChild := NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.WinID) : Acc.IAccessible(this.accessible, child, this.WinID)
                     NumGet(varChildren, i-8, "ptr") = 9 ? ObjRelease(child) : ""
                     Return oChild
                 }
@@ -847,11 +866,11 @@ class Acc {
                 return loc
             else if (relativeTo = "window") {
                 RECT := Buffer(16)
-                DllCall("user32\GetWindowRect", "Int", this.wId, "Ptr", RECT)
+                DllCall("user32\GetWindowRect", "Int", this.WinID, "Ptr", RECT)
                 return {x:(loc.x-NumGet(RECT, 0, "Int")), y:(loc.y-NumGet(RECT, 4, "Int")), w:loc.w, h:loc.h}
             } else if (relativeTo = "client") {
                 pt := Buffer(8), NumPut("int",loc.x,pt), NumPut("int",loc.y,pt,4)
-                DllCall("ScreenToClient", "Int", this.wId, "Ptr", pt)
+                DllCall("ScreenToClient", "Int", this.WinID, "Ptr", pt)
                 return {x:NumGet(pt,0,"int"), y:NumGet(pt,4,"int"), w:loc.w, h:loc.h}
             } else
                 throw Error(relativeTo "is not a valid CoordMode",-1)
@@ -1278,9 +1297,9 @@ class Acc {
             } else if ClickCount > 9 {
                 SleepTime := cCount, cCount := 1
             }
-            if (!NoActivate && (Acc.WindowFromPoint(pos.x+pos.w//2+rel[1], pos.y+pos.h//2+rel[2]) != this.wId)) {
-                WinActivate(this.wId)
-                WinWaitActive(this.wId)
+            if (!NoActivate && (Acc.WindowFromPoint(pos.x+pos.w//2+rel[1], pos.y+pos.h//2+rel[2]) != this.WinID)) {
+                WinActivate(this.WinID)
+                WinWaitActive(this.WinID)
             }
             CoordMode("Mouse", "Screen")
             Click(pos.x+pos.w//2+rel[1] " " pos.y+pos.h//2+rel[2] " " WhichButton (ClickCount ? " " ClickCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
@@ -1299,7 +1318,7 @@ class Acc {
          */
         ControlClick(WhichButton:="left", ClickCount:=1, Options:="") { 
             pos := this.GetLocation("client")
-            ControlClick("X" pos.x+pos.w//2 " Y" pos.y+pos.h//2, this.wId,, IsInteger(WhichButton) ? "left" : WhichButton, ClickCount, Options)
+            ControlClick("X" pos.x+pos.w//2 " Y" pos.y+pos.h//2, this.WinID,, IsInteger(WhichButton) ? "left" : WhichButton, ClickCount, Options)
             if IsInteger(WhichButton)
                 Sleep(WhichButton)
             return this
@@ -1319,7 +1338,7 @@ class Acc {
             DllCall("GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
         else
             pt64 := y << 32 | (x & 0xFFFFFFFF)
-        wId := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2) ; hwnd from point by SKAN. 2 = GA_ROOT
+        wId := DllCall("GetAncestor", "Ptr", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2) ; hwnd from point by SKAN. 2 = GA_ROOT
         if activateChromium
             Acc.ActivateChromiumAccessibility(wId)
         pvarChild := Buffer(8 + 2 * A_PtrSize)
@@ -1429,7 +1448,7 @@ class Acc {
                 , "UInt", idChild
                 , "Ptr*", pacc := ComValue(9,0)
                 , "Ptr", varChild := Buffer(16)) = 0) {
-            return Acc.IAccessible(pacc, NumGet(varChild, 8, "UInt"),  DllCall("GetAncestor", "UInt", hWnd, "UInt", 2))
+            return Acc.IAccessible(pacc, NumGet(varChild, 8, "UInt"),  DllCall("GetAncestor", "Ptr", hWnd, "UInt", 2))
         }
         throw Error("ObjectFromEvent failed", -1)
     }
@@ -1533,8 +1552,8 @@ class Acc {
     }
     ; Internal method. Calls the callback function after wrapping the IAccessible native object
     static HandleWinEvent(fCallback, hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
-        Critical
-        try return fCallback(oAcc := Acc.ObjectFromEvent(hWnd, idObject, idChild), {Event:Event, EventThread:dwEventThread, EventTime:dwmsEventTime&0x7FFFFFFF, ControlID:hWnd, WinID:oAcc.wId, ObjId:idObject})
+        Critical -1
+        try return fCallback(oAcc := Acc.ObjectFromEvent(hWnd, idObject, idChild), {Event:Event, EventThread:dwEventThread, EventTime:dwmsEventTime&0x7FFFFFFF, ControlID:hWnd, WinID:oAcc.WinID, ObjId:idObject})
     }
     ; Internal method. Hooks a range of events to a callback function.
     static SetWinEventHook(eventMin, eventMax, pCallback, PID:=0) {
@@ -1551,7 +1570,7 @@ class Acc {
      * @param Y Screen Y-coordinate
      */
 	static WindowFromPoint(X, Y) { ; by SKAN and Linear Spoon
-		return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", Y << 32 | (X & 0xFFFFFFFF)), "UInt", 2)
+		return DllCall("GetAncestor", "Ptr", DllCall("user32.dll\WindowFromPoint", "Int64", Y << 32 | (X & 0xFFFFFFFF)), "UInt", 2)
 	}
     /**
      * Removes all highlights created by Element.Highlight()
@@ -1632,7 +1651,13 @@ class Acc {
             LVData := Info > GuiCtrlObj.GetCount()
                 ? ListViewGetContent("", GuiCtrlObj)
                 : ListViewGetContent("Selected", GuiCtrlObj)
-            ToolTip("Copied: " (A_Clipboard := RegExReplace(LVData, "([ \w]+)\t", "$1: ")))
+                for LVData in StrSplit(LVData, "`n") {
+                    LVData := StrSplit(LVData, "`t",,2)
+                    if LVData.Length < 2
+                        continue
+                    out .= ", " (GuiCtrlObj.Hwnd = this.LVWin.Hwnd ? "" : LVData[1] ": ") (LVData[1] ~= "Role$|State$|ChildId" ? LVData[2] : LVData[1] = "Location" ? "{" LVData[2] "}" : "`"" StrReplace(StrReplace(LVData[2], "``", "````"), "`"", "```"") "`"")
+                }
+                ToolTip("Copied: " (A_Clipboard := SubStr(out, 3)))
             SetTimer((*) => ToolTip(), -3000)
         }
         ; Copies the Acc path to clipboard when statusbar is clicked
