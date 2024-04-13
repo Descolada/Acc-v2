@@ -1,13 +1,13 @@
 ﻿#include ..\Lib\Acc.ahk
 #Requires AutoHotkey v2.0-a
 
-; Returns the URL from the document element of a web browser. 
+; Tries to return the URL from the document element of a web browser. 
 ; Hover over a browser with the cursor to test it out.
 
 Loop {
     oAcc := Acc.ElementFromPoint(), oEl := ""
     try {
-        oEl := oAcc.Normalize({RoleText:"document", not:{Value:""}})
+        oEl := oAcc.Normalize({Role:15, not:{Value:""}})
         RoleText := "`"`"", Name := " `"`""
         try RoleText := "`"" oAcc.RoleText "`""
         try Name := " `"" oAcc.Name "`""
