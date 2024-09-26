@@ -571,13 +571,12 @@ class Acc {
             this.DefineProp("childId", {value:childId})
             if wId
                 this.DefineProp("WinID", {value:wId})
-            this.DefineProp("ObjPtr", {value:ObjPtr(this)})
         }
         __Delete() {
-            if Acc.__HighlightGuis.Has(this.ObjPtr) {
-                for _, r in Acc.__HighlightGuis[this.ObjPtr]
+            if Acc.__HighlightGuis.Has(this) {
+                for _, r in Acc.__HighlightGuis[this]
                     r.Destroy()
-                Acc.__HighlightGuis[this.ObjPtr] := []
+                Acc.__HighlightGuis[this] := []
             }
         }
         /**
@@ -784,6 +783,21 @@ class Acc {
                 throw Error("AccessibleChildren DllCall Failed", -1)
             }
         }
+        Identity {
+            get {
+                pIAccIdentity := ComObjQuery(this.accessible, "{7852B78D-1CFD-41C1-A615-9C0C85960B5F}")
+                if ComCall(3, pIAccIdentity, "int", this.childId, "ptr*", &ppIDString:=0, "int*", &pdwIDStringLen := 0) = 0 { ; GetIdentityString
+                    byteBuffer := Buffer(pdwIDStringLen)
+                    result := ""
+                    Loop pdwIDStringLen
+                        result .= Format("{:x}", NumGet(ppIDString, A_Index-1, "uchar"))
+                    if ppIDString
+                        DllCall("ole32.dll\CoTaskMemFree", "ptr", ppIDString)
+                    return result
+                } else
+                    throw Error("GetIdentityString call failed! Property probably not implemented.", -1)
+            }
+        }
         /**
          * Internal method. Used to convert a variant returned by native IAccessible to 
          * an Acc element or an array of Acc elements.
@@ -916,7 +930,7 @@ class Acc {
          * @returns {Acc.IAccessible}
          */
         FindElement(condition, scope:=4, index:=1, order:=0, depth:=-1) {
-            if IsObject(condition) {
+            if IsObject(condition) && !HasMethod(condition) {
                 for key in ["index", "scope", "depth", "order"]
                 if condition.HasOwnProp(key)
                     %key% := condition.%key%
@@ -988,7 +1002,7 @@ class Acc {
          * @returns {[Acc.IAccessible]}
          */
         FindElements(condition:=True, scope:=4, depth:=-1) {
-            if Type(condition) = "Object" {
+            if IsObject(condition) && !HasMethod(condition) {
                 if condition.HasOwnProp("scope")
                     scope := condition.scope
                 if condition.HasOwnProp("depth")
@@ -1110,7 +1124,9 @@ class Acc {
         ValidateCondition(oCond) {
             if !IsObject(oCond)
                 return !!oCond ; if oCond is not an object, then it is treated as True or False condition
-            if Type(oCond) = "Array" { ; or condition
+            if HasMethod(oCond)
+                return oCond(this)
+            else if oCond is Array { ; or condition
                 for _, c in oCond
                     if this.ValidateCondition(c)
                         return 1
@@ -1234,12 +1250,12 @@ class Acc {
          * @returns {Acc.IAccessible}
          */
         Highlight(showTime:=unset, color:="Red", d:=2) {
-            if !Acc.__HighlightGuis.Has(this.ObjPtr)
-                Acc.__HighlightGuis[this.ObjPtr] := []
-            if (!IsSet(showTime) && Acc.__HighlightGuis[this.ObjPtr].Length) || (IsSet(showTime) && showTime = "clear") {
-                for _, r in Acc.__HighlightGuis[this.ObjPtr]
+            if !Acc.__HighlightGuis.Has(this)
+                Acc.__HighlightGuis[this] := []
+            if (!IsSet(showTime) && Acc.__HighlightGuis[this].Length) || (IsSet(showTime) && showTime = "clear") {
+                for _, r in Acc.__HighlightGuis[this]
                     r.Destroy()
-                Acc.__HighlightGuis[this.ObjPtr] := []
+                Acc.__HighlightGuis[this] := []
                 return this
             } else if !IsSet(showTime)
                 showTime := 2000
@@ -1247,7 +1263,7 @@ class Acc {
             if !IsSet(loc) || !IsObject(loc)
                 return this
             Loop 4 {
-                Acc.__HighlightGuis[this.ObjPtr].Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
+                Acc.__HighlightGuis[this].Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
             }
             Loop 4
             {
@@ -1256,8 +1272,8 @@ class Acc {
                 , y1:=(i=3 ? loc.y+loc.h : loc.y-d)
                 , w1:=(i=1 or i=3 ? loc.w+2*d : d)
                 , h1:=(i=2 or i=4 ? loc.h+2*d : d)
-                Acc.__HighlightGuis[this.ObjPtr][i].BackColor := color
-                Acc.__HighlightGuis[this.ObjPtr][i].Show("NA x" . x1 . " y" . y1 . " w" . w1 . " h" . h1)
+                Acc.__HighlightGuis[this][i].BackColor := color
+                Acc.__HighlightGuis[this][i].Show("NA x" . x1 . " y" . y1 . " w" . w1 . " h" . h1)
             }
             if showTime > 0 {
                 Sleep(showTime)
@@ -1603,7 +1619,7 @@ class Acc {
             this.LVProps.OnEvent("ContextMenu", LV_CopyTextMethod)
             this.LVProps.ModifyCol(1,100)
             this.LVProps.ModifyCol(2,140)
-            for _, v in ["RoleText", "Role", "Value", "Name", "Location", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId"]
+            for _, v in ["RoleText", "Role", "Value", "Name", "Location", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId", "Identity"]
                 this.LVProps.Add(,v,"")
             this.ButCapture := this.gViewer.Add("Button", "xp+60 y+10 w130", "Start capturing (F1)")
             this.ButCapture.OnEvent("Click", this.CaptureHotkeyFunc := this.GetMethod("ButCapture_Click").Bind(this))
@@ -1708,8 +1724,8 @@ class Acc {
             Acc.ClearHighlights() ; Clear
             oAcc.Highlight(0) ; Indefinite show
             this.LVProps.Delete()
-            Location := {x:"N/A",y:"N/A",w:"N/A",h:"N/A"}, RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", ChildId := ""
-            for _, v in ["RoleText", "Role", "Value", "Name", "Location", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId"] {
+            Location := {x:"N/A",y:"N/A",w:"N/A",h:"N/A"}, RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", ChildId := "", Identity := "N/A"
+            for _, v in ["RoleText", "Role", "Value", "Name", "Location", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId", "Identity"] {
                 try %v% := oAcc.%v%
                 this.LVProps.Add(,v, v = "Location" ? ("x: " %v%.x " y: " %v%.y " w: " %v%.w " h: " %v%.h) : %v%)
             }
@@ -1758,7 +1774,7 @@ class Acc {
             this.TVAcc.Opt("-Redraw")
             this.TVAcc.Delete()
             for index, oAcc in this.Stored.TreeView {
-                for _, prop in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId"] {
+                for _, prop in ["RoleText", "Role", "Value", "Name", "StateText", "State", "DefaultAction", "Description", "KeyboardShortcut", "Help", "ChildId", "Identity"] {
                     try {
                         if InStr(oAcc.%Prop%, searchPhrase) {
                             if !parents.Has(prop)
