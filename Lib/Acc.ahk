@@ -607,7 +607,7 @@ class Acc {
         Loop params.Length // 2 {
             name := params[++i], value := params[++i]
             if obj.HasProp(name)
-                %value% := obj.%name%
+                %value% := obj.%name%, obj.DeleteProp(name)
         }
         return 1
     }
