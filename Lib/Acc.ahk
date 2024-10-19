@@ -282,7 +282,7 @@ class Acc {
         }
     }
 
-    static RegisteredWinEvents := Map()
+    static RegisteredWinEvents := Map(), MaxRecurseDepth := 0xFFFFFFFF
 
     ; MatchMode constants used in condition objects
     static MatchMode := {
@@ -553,7 +553,64 @@ class Acc {
         base:this.Enumeration.Prototype
     }
 
+    class TypeValidation {
+        static Element(arg) {
+            if !arg || (arg is Acc.IAccessible)
+                return arg
+            throw TypeError("Element argument requires parameter with type Acc.JavaAccessibleContext, but received " Type(arg), -2)
+        }
+        static Integer(arg, paramName) {
+            if IsInteger(arg)
+                return Integer(arg)
+            throw TypeError(paramName " requires type Integer, but received type " Type(arg), -2)
+        }
+        static String(arg, paramName) {
+            if arg is String
+                return arg
+            if !(arg is Object)
+                return String(arg)
+            throw TypeError(paramName " requires type String, but received type " Type(arg), -2)
+        }
+        static Object(arg, paramName) {
+            if arg is Object
+                return arg
+            throw TypeError(paramName " requires type Object, but received type " Type(arg), -2)
+        }
+        static TreeScope(arg) {
+            if IsInteger(arg) {
+                if arg < 1 || arg > 31
+                    throw ValueError("Acc.TreeScope does not contain constant `"" arg "`"", -2)
+                return Integer(arg)
+            } else if arg is String {
+                try return Acc.TreeScope.%arg%
+                throw ValueError("Acc.TreeScope does not contain value for `"" arg "`"", -2)
+            }
+            throw TypeError("Acc.TreeScope requires parameter with type Integer or String, but received " Type(arg), -2)
+        }
+        static TreeTraversalOptions(arg) {
+            if IsInteger(arg) {
+                return Integer(arg)
+            } else if arg is String {
+                try return Acc.TreeTraversalOptions.%arg%
+                try return Acc.TreeTraversalOptions.%arg "Order"%
+                throw ValueError("Acc.TreeTraversalOptions does not contain value for `"" arg "`"", -2)
+            }
+            throw TypeError("Invalid type provided for Acc.TreeTraversalOptions", -2, "Allowed types are Integer and String, but was provided type " Type(arg))
+        }
+    }
+
     static __HighlightGuis := Map()
+    static __ExtractNamedParameters(obj, params*) {
+        local i := 0
+        if !IsObject(obj) || Type(obj) != "Object"
+            return 0
+        Loop params.Length // 2 {
+            name := params[++i], value := params[++i]
+            if obj.HasProp(name)
+                %value% := obj.%name%
+        }
+        return 1
+    }
 
     class IAccessible {
         /**
@@ -783,6 +840,8 @@ class Acc {
                 throw Error("AccessibleChildren DllCall Failed", -1)
             }
         }
+        ReversedChildren => this.Children.DefineProp("__Enum", {call: (s, i) => (i = 1 ? (i := s.Length, (&v) => i > 0 ? (v := s[i], i--) : false) : (i := s.Length, (&k, &v) => (i > 0 ? (k := i, v := s[i], i--) : false)))})
+
         Identity {
             get {
                 pIAccIdentity := ComObjQuery(this.accessible, "{7852B78D-1CFD-41C1-A615-9C0C85960B5F}")
@@ -926,107 +985,112 @@ class Acc {
          * @param scope The search scope (Acc.TreeScope value): Element, Children, Family (Element+Children), Descendants, SubTree (Element+Descendants). Default is Descendants.
          * @param index Looks for the n-th element matching the condition
          * @param order The order of tree traversal (Acc.TreeTraversalOptions value): Default, LastToFirst, PostOrder. Default is FirstToLast and PreOrder.
-         * @param depth Maximum level of depth for the search. Default is no limit.
+         * @param maxDepth Maximum level of depth for the search. Default is no limit.
          * @returns {Acc.IAccessible}
          */
-        FindElement(condition, scope:=4, index:=1, order:=0, depth:=-1) {
-            if IsObject(condition) && !HasMethod(condition) {
-                for key in ["index", "scope", "depth", "order"]
-                if condition.HasOwnProp(key)
-                    %key% := condition.%key%
-                if condition.HasOwnProp("i")
-                    index := condition.i
-                if index < 0
-                    order |= 2, index := -index
-                else if index = 0
-                    throw Error("Condition index cannot be 0", -1)
+        FindElement(condition, scope:=4, index:=1, order:=0, maxDepth:=Acc.MaxRecurseDepth) {
+            local callback := 0, found, c := 0
+            Acc.__ExtractNamedParameters(condition, "scope", &scope, "index", &index, "i", &index, "order", &order, "maxDepth", &maxDepth, "callback", &callback, "condition", &condition)
+            callback := callback || Acc.IAccessible.Prototype.ValidateCondition.Bind(unset, condition), scope := Acc.TypeValidation.TreeScope(scope), index := Acc.TypeValidation.Integer(index, "Index"), order := Acc.TypeValidation.TreeTraversalOptions(order)
+            if index < 0
+                order |= 2, index := -index
+            else if index = 0
+                throw ValueError("Condition index cannot be 0", -1)
+            ChildOrder := order&2 ? "ReversedChildren" : "Children"
+            if order&1 {
+                if IsObject(found := PostOrderRecursiveFind(this, scope))
+                    return found
+                throw TargetError("An element matching the condition was not found", -1)
             }
-            scope := IsInteger(scope) ? scope : Acc.TreeScope.%scope%, order := IsInteger(order) ? order : Acc.TreeTraversalOptions.%order%
+            if scope&1 && (c := this.ValidateCondition(condition, 1, 0)) > 0 && (--index = 0)
+                return this.DefineProp("Path", {value:""})
+            if scope>1 && c >= 0 && found := PreOrderRecursiveFind(this)
+                return found
+            throw TargetError("An element matching the condition was not found", -1)
 
-            if order&1
-                return order&2 ? PostOrderLastToFirstRecursiveFind(this, condition, scope,, ++depth) : PostOrderFirstToLastRecursiveFind(this, condition, scope,, ++depth)
-            if scope&1
-                if this.ValidateCondition(condition) && (--index = 0)
-                    return this.DefineProp("Path", {value:""})
-            if scope>1
-                return order&2 ? PreOrderLastToFirstRecursiveFind(this, condition, scope,, depth) : PreOrderFirstToLastRecursiveFind(this, condition, scope,,depth)
-
-            PreOrderFirstToLastRecursiveFind(element, condition, scope:=4, path:="", depth:=-1) {
-                --depth
-                for i, child in element.Children {
-                    if child.ValidateCondition(condition) && (--index = 0)
-                        return child.DefineProp("Path", {value:path (path?",":"") i})
-                    else if (scope&4) && (depth != 0) && (rf := PreOrderFirstToLastRecursiveFind(child, condition,, path (path?",":"") i, depth))
+            PreOrderRecursiveFind(element, path:="", depth:=0) {
+                local c
+                if (++depth, depth > maxDepth)
+                    return
+                for i, child in element.%ChildOrder% {
+                    if (c := 0, c := child.ValidateCondition(condition, i, depth)) > 0 && (--index = 0)
+                        return child.DefineProp("Path", {value:Trim(path "," i, ",")})
+                    else if (c >= 0) && (scope&4) && (rf := PreOrderRecursiveFind(child, path "," i, depth))
                         return rf 
                 }
             }
-            PreOrderLastToFirstRecursiveFind(element, condition, scope:=4, path:="", depth:=-1) {
-                children := element.Children, length := children.Length + 1, --depth
-                Loop (length - 1) {
-                    child := children[length-A_index]
-                    if child.ValidateCondition(condition) && (--index = 0)
-                        return child.DefineProp("Path", {value:path (path?",":"") (length-A_index)})
-                    else if scope&4 && (depth != 0) && (rf := PreOrderLastToFirstRecursiveFind(child, condition,, path (path?",":"") (length-A_index), depth))
-                        return rf 
-                }
-            }
-            PostOrderFirstToLastRecursiveFind(element, condition, scope:=4, path:="", depth:=-1) {
-                if (--depth != 0) && scope>1 {
-                    for i, child in element.Children {
-                        if (rf := PostOrderFirstToLastRecursiveFind(child, condition, (scope & ~2)|1, path (path?",":"") i, depth))
+            PostOrderRecursiveFind(element, scope, path:="", i:=1, depth:=-1) {
+                if (++depth, depth > maxDepth)
+                    return
+                local c := 0
+                if scope>1 {
+                    for j, child in element.%ChildOrder% {
+                        if IsObject(rf := PostOrderRecursiveFind(child, (scope & ~2)|1, path "," j, j, depth))
                             return rf 
+                        else if rf = -1
+                            break
                     }
                 }
-                if scope&1 && element.ValidateCondition(condition) && (--index = 0)
-                    return element.DefineProp("Path", {value:path})
-            }
-            PostOrderLastToFirstRecursiveFind(element, condition, scope:=4, path:="", depth:=-1) {
-                if (--depth != 0) && scope>1 {
-                    children := element.Children, length := children.Length + 1
-                    Loop (length - 1) {
-                        if (rf := PostOrderLastToFirstRecursiveFind(children[length-A_index], condition, (scope & ~2)|1, path (path?",":"") (length-A_index), depth))
-                            return rf 
-                    }
-                }
-                if scope&1 && element.ValidateCondition(condition) && (--index = 0)
-                    return element.DefineProp("Path", {value:path})
+                if scope&1 && (c := element.ValidateCondition(condition, i, depth)) > 0 && (--index = 0)
+                    return element.DefineProp("Path", {value:Trim(path, ",")})
+                return c
             }
         }
         FindFirst(args*) => this.FindElement(args*)
+        ElementExist(condition, scope:=4, index:=1, order:=0, maxDepth:=0xFFFFFFFF) {
+            try return this.FindElement(condition, scope, index, order, maxDepth)
+            return 0
+        }
         /**
          * Returns an array of elements matching the condition (see description under ValidateCondition)
          * The returned elements also have the "Path" property with the found elements path
          * @param condition Condition object (see ValidateCondition). Default is to match any condition.
          * @param scope The search scope (Acc.TreeScope value): Element, Children, Family (Element+Children), Descendants, SubTree (Element+Descendants). Default is Descendants.
-         * @param depth Maximum level of depth for the search. Default is no limit.
+         * @param order The order of tree traversal (Acc.TreeTraversalOptions value): Default, LastToFirst, PostOrder. Default is FirstToLast and PreOrder.
+         * @param maxDepth Maximum level of depth for the search. Default is no limit.
          * @returns {[Acc.IAccessible]}
          */
-        FindElements(condition:=True, scope:=4, depth:=-1) {
-            if IsObject(condition) && !HasMethod(condition) {
-                if condition.HasOwnProp("scope")
-                    scope := condition.scope
-                if condition.HasOwnProp("depth")
-                    depth := condition.depth
-            }
+        FindElements(condition:=True, scope:=4, order:=0, maxDepth:=Acc.MaxRecurseDepth) {
+            local callback := 0, foundElements := [], c := 0
+            Acc.__ExtractNamedParameters(condition, "scope", &scope, "order", &order, "maxDepth", &maxDepth, "callback", &callback, "condition", &condition)
+            callback := callback || Acc.IAccessible.Prototype.ValidateCondition.Bind(unset, condition), scope := Acc.TypeValidation.TreeScope(scope), order := Acc.TypeValidation.TreeTraversalOptions(order)
+            ChildOrder := order&2 ? "ReversedChildren" : "Children"
+            ; First handle PostOrder
+            if order&1
+                return (PostOrderRecursiveFind(this, scope), foundElements)
+            ; PreOrder
+            if scope&1 && (c := callback(this, 1, 0)) > 0
+                this.DefineProp("Path", {value:""}), foundElements.Push(this)
+            if scope > 1 && c >= 0
+                return (PreOrderRecursiveFind(this), foundElements)
+            return foundElements
 
-            matches := [], ++depth, scope := IsInteger(scope) ? scope : Acc.TreeScope.%scope%
-            if scope&1
-                if this.ValidateCondition(condition)
-                    matches.Push(this.DefineProp("Path", {value:""}))
-            if scope>1
-                RecursiveFind(this, condition, (scope|1)^1, &matches,, depth)
-            return matches
-            RecursiveFind(element, condition, scope, &matches, path:="", depth:=-1) {
-                if scope>1 {
-                    --depth
-                    for i, child in element {
-                        if child.ValidateCondition(condition)
-                            matches.Push(child.DefineProp("Path", {value:path (path?",":"") i}))
-                        if scope&4 && (depth != 0)
-                            RecursiveFind(child, condition, scope, &matches, path (path?",":"") i, depth)
+            PreOrderRecursiveFind(el, path:="", depth:=0) {
+                local child, c
+                if (++depth, depth > maxDepth)
+                    return
+                for i, child in el.%ChildOrder% {
+                    c := 0
+                    if (c := callback(child, i, depth)) > 0
+                        child.DefineProp("Path", {value:Trim(path "," i, ",")}), foundElements.Push(child)
+                    if c >= 0 && scope&4
+                        PreOrderRecursiveFind(child, path "," i, depth)
+                }
+            }
+            PostOrderRecursiveFind(el, scope, path:="", i:=1, depth:=-1) {
+                local child, c := 0
+                if (++depth, depth > maxDepth)
+                    return c
+                if scope > 1 {
+                    for j, child in el.%ChildOrder% {
+                        if PostOrderRecursiveFind(child, (scope & ~2)|1, path "," j, j, depth) = -1
+                            break
                     }
                 }
-            }          
+                if scope&1 && (c := callback(el, i, depth)) > 0
+                    el.DefineProp("Path", {value:Trim(path, ",")}), foundElements.Push(el)
+                return c
+            }       
         }
         FindAll(args*) => this.FindElements(args*)
         /**
@@ -1121,14 +1185,14 @@ class Acc {
             [{Name:"Something", Role:42}, {Name:"Something2", RoleText:"something else"}] => Name=="Something" and Role==42 OR Name=="Something2" and RoleText=="something else"
             {Name:"Something", not:[RoleText:"something", RoleText:"something else"]} => Name must match "something" and RoleText cannot match "something" nor "something else"
         */
-        ValidateCondition(oCond) {
+        ValidateCondition(oCond, i?, depth?) {
             if !IsObject(oCond)
                 return !!oCond ; if oCond is not an object, then it is treated as True or False condition
             if HasMethod(oCond)
-                return oCond(this)
+                return oCond(this, i?, depth?)
             else if oCond is Array { ; or condition
                 for _, c in oCond
-                    if this.ValidateCondition(c)
+                    if this.ValidateCondition(c, i?, depth?)
                         return 1
                 return 0
             }
@@ -1162,7 +1226,7 @@ class Acc {
                                     return 0
                         }
                     case "Acc.IAccessible":
-                        if (prop="IsEqual") ? !this.IsEqual(cond) : !this.ValidateCondition(cond)
+                        if (prop="IsEqual") ? !this.IsEqual(cond) : !this.ValidateCondition(cond, i?, depth?)
                             return 0
                     default:
                         if (HasProp(cond, "Length") ? cond.Length = 0 : ObjOwnPropCount(cond) = 0) {
@@ -1179,7 +1243,7 @@ class Acc {
                                 if (!((lprop = "relative") || (lprop = "r")) && (loc.%lprop% != lval))
                                     return 0
                             }
-                        } else if ((prop = "not") ? this.ValidateCondition(cond) : !this.ValidateCondition(cond))
+                        } else if ((prop = "not") ? this.ValidateCondition(cond, i?, depth?) : !this.ValidateCondition(cond, i?, depth?))
                             return 0
                 }
             }
@@ -1189,10 +1253,10 @@ class Acc {
          * Outputs relevant information about the element
          * @param scope The search scope: Element, Children, Family (Element+Children), Descendants, SubTree (Element+Descendants). Default is Element.
          * @param delimiter The delimiter separating the outputted properties
-         * @param depth Maximum number of levels to dump. Default is no limit.
+         * @param maxDepth Maximum number of levels to dump. Default is no limit.
          * @returns {String}
          */
-        Dump(scope:=1, delimiter:=" ", depth:=-1) {
+        Dump(scope:=1, delimiter:=" ", maxDepth:=Acc.MaxRecurseDepth) {
             out := "", scope := IsInteger(scope) ? scope : Acc.TreeScope.%scope%
             if scope&1 {
                 RoleText := "N/A", Role := "N/A", Value := "N/A", Name := "N/A", StateText := "N/A", State := "N/A", DefaultAction := "N/A", Description := "N/A", KeyboardShortcut := "N/A", Help := "N/A", Location := {x:"N/A",y:"N/A",w:"N/A",h:"N/A"}
@@ -1201,19 +1265,16 @@ class Acc {
                 out := "RoleText: " RoleText delimiter "Role: " Role delimiter "[Location: {x:" Location.x ",y:" Location.y ",w:" Location.w ",h:" Location.h "}]" delimiter "[Name: " Name "]" delimiter "[Value: " Value  "]" (StateText ? delimiter "[StateText: " StateText "]" : "") (State ? delimiter "[State: " State "]" : "") (DefaultAction ? delimiter "[DefaultAction: " DefaultAction "]" : "") (Description ? delimiter "[Description: " Description "]" : "") (KeyboardShortcut ? delimiter "[KeyboardShortcut: " KeyboardShortcut "]" : "") (Help ? delimiter "[Help: " Help "]" : "") (this.childId ? delimiter "ChildId: " this.childId : "") "`n"
             }
             if scope&4
-                return Trim(RecurseTree(this, out,, depth), "`n")
+                return Trim(RecurseTree(this, out), "`n")
             if scope&2 {
                 for n, oChild in this.Children
                     out .= n ":" delimiter oChild.Dump() "`n"
             }
             return Trim(out, "`n")
 
-            RecurseTree(oAcc, tree, path:="", depth:=-1) {
-                if depth > 0 {
-                    StrReplace(path, "," , , , &count)
-                    if count >= (depth-1)
-                        return tree
-                }
+            RecurseTree(oAcc, tree, path:="", depth:=0) {
+                if (++depth, depth > maxDepth)
+                    return tree
                 try {
                     if !oAcc.Length
                         return tree
@@ -1233,7 +1294,7 @@ class Acc {
          * @param depth Maximum number of levels to dump. Default is no limit.
          * @returns {String}
          */
-        DumpAll(delimiter:=" ", depth:=-1) => this.Dump(5, delimiter, depth)
+        DumpAll(delimiter:=" ", maxDepth:=Acc.MaxRecurseDepth) => this.Dump(5, delimiter, maxDepth)
         ; Same as Dump()
         ToString() => this.Dump()
 
