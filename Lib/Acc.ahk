@@ -1623,14 +1623,17 @@ class Acc {
             try eventMin := Acc.Event.%eventMin%
         if Type(eventMax) = "String"
             try eventMax := Acc.Event.%eventMax%
-        pCallback := CallbackCreate(this.GetMethod("HandleWinEvent").Bind(this, callback), "F", 7)
+        pCallback := CallbackCreate(this.GetMethod("HandleWinEvent").Bind(this, callback),, 7)
         hook := Acc.SetWinEventHook(eventMin, eventMax, pCallback, PID)
         return {__Hook:hook, __Callback:pCallback, __Delete:{ call: (*) => (this.UnhookWinEvent(hook), CallbackFree(pCallback)) }}
     }
     ; Internal method. Calls the callback function after wrapping the IAccessible native object
     static HandleWinEvent(fCallback, hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
-        Critical -1
-        try return fCallback(oAcc := Acc.ObjectFromEvent(hWnd, idObject, idChild), {Event:Event, EventThread:dwEventThread, EventTime:dwmsEventTime&0x7FFFFFFF, ControlID:hWnd, WinID:oAcc.WinID, ObjId:idObject})
+        idObject := idObject << 32 >> 32, idChild := idChild << 32 >> 32, event &= 0xFFFFFFFF, idEventThread &= 0xFFFFFFFF, dwmsEventTime &= 0xFFFFFFFF ; convert to INT/UINT
+        try oAcc := Acc.ObjectFromEvent(hWnd, idObject, idChild)
+        catch
+            return 0
+        return fCallback(oAcc, {Event:Event, EventThread:dwEventThread, EventTime:dwmsEventTime, ControlID:hWnd, WinID:oAcc.WinID, ObjId:idObject})
     }
     ; Internal method. Hooks a range of events to a callback function.
     static SetWinEventHook(eventMin, eventMax, pCallback, PID:=0) {
