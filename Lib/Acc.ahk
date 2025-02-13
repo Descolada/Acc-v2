@@ -1629,7 +1629,7 @@ class Acc {
     }
     ; Internal method. Calls the callback function after wrapping the IAccessible native object
     static HandleWinEvent(fCallback, hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
-        idObject := idObject << 32 >> 32, idChild := idChild << 32 >> 32, event &= 0xFFFFFFFF, idEventThread &= 0xFFFFFFFF, dwmsEventTime &= 0xFFFFFFFF ; convert to INT/UINT
+        idObject := idObject << 32 >> 32, idChild := idChild << 32 >> 32, event &= 0xFFFFFFFF, dwEventThread &= 0xFFFFFFFF, dwmsEventTime &= 0xFFFFFFFF ; convert to INT/UINT
         try oAcc := Acc.ObjectFromEvent(hWnd, idObject, idChild)
         catch
             return 0
