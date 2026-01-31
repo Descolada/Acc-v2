@@ -831,8 +831,8 @@ class Acc {
                         Loop cChildren {
                             i := (A_Index-1) * (A_PtrSize * 2 + 8) + 8
                             child := NumGet(varChildren, i, "ptr")
-                            Children.Push(NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.WinID) : Acc.IAccessible(this.accessible, child, this.WinID))
-                            NumGet(varChildren, i-8, "ptr") = 9 ? ObjRelease(child) : ""
+                            Children.Push(NumGet(varChildren, i-8, "ushort") = 9 ? Acc.IAccessible(Acc.Query(child),,this.WinID) : Acc.IAccessible(this.accessible, child, this.WinID))
+                            NumGet(varChildren, i-8, "ushort") = 9 ? ObjRelease(child) : ""
                         }
                         Return Children
                     }
@@ -894,8 +894,8 @@ class Acc {
                         throw IndexError("Child index " n " is out of bounds", -1)
                     i := (n-1) * (A_PtrSize * 2 + 8) + 8
                     child := NumGet(varChildren, i, "ptr")
-                    oChild := NumGet(varChildren, i-8, "ptr") = 9 ? Acc.IAccessible(Acc.Query(child),,this.WinID) : Acc.IAccessible(this.accessible, child, this.WinID)
-                    NumGet(varChildren, i-8, "ptr") = 9 ? ObjRelease(child) : ""
+                    oChild := NumGet(varChildren, i-8, "ushort") = 9 ? Acc.IAccessible(Acc.Query(child),,this.WinID) : Acc.IAccessible(this.accessible, child, this.WinID)
+                    NumGet(varChildren, i-8, "ushort") = 9 ? ObjRelease(child) : ""
                     Return oChild
                 }
             }
